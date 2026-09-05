@@ -1,0 +1,6 @@
+{
+  "name": "Multi-Branch Inventory & Invoicing Management System",
+  "description": "Multi-branch, multi-location inventory and stock transfer management with Google Sheets synchronization, facture and proforma invoices, FC to USD conversion, TVA customization, and user email authorization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
