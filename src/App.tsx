@@ -14,12 +14,15 @@ import { InvoicesView } from './components/InvoicesView';
 import { StockTransferReportView } from './components/StockTransferReportView';
 import { SettingsView } from './components/SettingsView';
 import { AuthGate } from './components/AuthGate';
+import { BranchSelectGate } from './components/BranchSelectGate';
 
 const MainAppContent: React.FC = () => {
   const {
     currentUser,
     isAuthenticated,
     isEmailAuthorized,
+    isBranchConfirmed,
+    activeBranch
   } = useInventory();
 
   const [activeTab, setActiveTab] = useState<
@@ -35,9 +38,15 @@ const MainAppContent: React.FC = () => {
 
   const isUserValid = isEmailAuthorized(currentUser.email);
 
-  // If the user is not authenticated or email is not authorized, show the security AuthGate
+  // 1. If the user is not authenticated or email is not authorized, show security AuthGate
   if (!isAuthenticated || !isUserValid) {
     return <AuthGate />;
+  }
+
+  // 2. User must select their operating branch location before entering the dashboard
+  // "give option to select branch before show the all dashboad so that other branch user not enter in other branch locations"
+  if (!isBranchConfirmed || !activeBranch) {
+    return <BranchSelectGate />;
   }
 
   return (

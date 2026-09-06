@@ -37,6 +37,7 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
     stockItems,
     company,
     currentUser,
+    activeBranch,
     createTransfer,
     updateTransfer,
     deleteTransfer,
@@ -54,8 +55,11 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
   const [editingTransfer, setEditingTransfer] = useState<StockTransfer | null>(null);
 
   // Form State
-  const [fromBranchId, setFromBranchId] = useState(branches[0]?.id || 'branch-1');
-  const [toBranchId, setToBranchId] = useState(branches[1]?.id || 'branch-2');
+  const defaultFromId = activeBranch?.id || branches[0]?.id || 'branch-1';
+  const defaultToId = branches.find(b => b.id !== defaultFromId)?.id || branches[1]?.id || 'branch-2';
+
+  const [fromBranchId, setFromBranchId] = useState(defaultFromId);
+  const [toBranchId, setToBranchId] = useState(defaultToId);
   const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
   const [carrier, setCarrier] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
@@ -91,8 +95,10 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
 
   const handleOpenCreateModal = () => {
     setEditingTransfer(null);
-    setFromBranchId(branches[0]?.id || '');
-    setToBranchId(branches[1]?.id || '');
+    const initialFromId = activeBranch?.id || branches[0]?.id || '';
+    const initialToId = branches.find(b => b.id !== initialFromId)?.id || branches[1]?.id || '';
+    setFromBranchId(initialFromId);
+    setToBranchId(initialToId);
     setTransferDate(new Date().toISOString().split('T')[0]);
     setCarrier('');
     setVehicleNumber('');

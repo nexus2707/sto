@@ -34,6 +34,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     stockItems,
     company,
     currentUser,
+    activeBranch,
     createInvoice,
     deleteInvoice
   } = useInventory();
@@ -49,7 +50,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
   // Form State
   const [invoiceType, setInvoiceType] = useState<InvoiceType>('facture');
-  const [selectedBranchId, setSelectedBranchId] = useState(branches[0]?.id || 'branch-1');
+  const [selectedBranchId, setSelectedBranchId] = useState(activeBranch?.id || branches[0]?.id || 'branch-1');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -97,7 +98,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
   const handleOpenCreate = (type: InvoiceType = 'facture') => {
     setInvoiceType(type);
-    setSelectedBranchId(branches[0]?.id || 'branch-1');
+    setSelectedBranchId(activeBranch?.id || branches[0]?.id || 'branch-1');
     setDate(new Date().toISOString().split('T')[0]);
     setDueDate('');
     setCustomerName('');

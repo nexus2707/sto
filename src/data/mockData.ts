@@ -1,7 +1,7 @@
 import { Branch, CompanyProfile, StockItem, StockTransfer, Invoice, AuthorizedUser } from '../types';
 
 export const INITIAL_COMPANY: CompanyProfile = {
-  companyName: 'RFT GLOBAL TRADING & LOGISTICS SARL',
+  companyName: 'Flow Easy',
   taxNumber: 'CD-KIN-TVA-00984218-A',
   nationalId: '01-83-N45209P',
   rccm: 'CD/KIN/RCCM/20-B-08412',
@@ -16,44 +16,19 @@ export const INITIAL_COMPANY: CompanyProfile = {
 
 export const INITIAL_BRANCHES: Branch[] = [
   {
-    id: 'branch-1',
-    name: 'Kinshasa Central Depot & Showroom',
-    code: 'B01-KIN-CENTRAL',
-    address: 'Av. du Commerce No. 142, Quartier Commercial, Gombe, Kinshasa',
+    id: 'branch-kin',
+    name: 'KIn',
+    code: 'KIN',
+    invPrefix: 'Test',
+    address: 'Gombe',
     city: 'Kinshasa',
-    phone: '+243 81 222 3344',
-    email: 'kinshasa.central@rftcom-trading.com',
-    manager: 'Michel Kabongo'
-  },
-  {
-    id: 'branch-2',
-    name: 'Lubumbashi Industrial Hub',
-    code: 'B02-LUB-HUB',
-    address: 'Route Kipushi Km 4, Zone Industrielle, Lubumbashi, Haut-Katanga',
-    city: 'Lubumbashi',
-    phone: '+243 97 111 8899',
-    email: 'lubumbashi.hub@rftcom-trading.com',
-    manager: 'Sarah Ilunga'
-  },
-  {
-    id: 'branch-3',
-    name: 'Kolwezi Mining Logistics Branch',
-    code: 'B03-KLZ-MINE',
-    address: 'Boulevard Laurent Désiré Kabila No. 88, Kolwezi, Lualaba',
-    city: 'Kolwezi',
-    phone: '+243 85 444 5566',
-    email: 'kolwezi.branch@rftcom-trading.com',
-    manager: 'Jean-Pierre Tshisekedi'
-  },
-  {
-    id: 'branch-4',
-    name: 'Matadi Port Transit Warehouse',
-    code: 'B04-MTD-PORT',
-    address: 'Av. Maritime No. 12, Enceinte Portuaire, Matadi, Kongo-Central',
-    city: 'Matadi',
-    phone: '+243 89 666 7788',
-    email: 'matadi.port@rftcom-trading.com',
-    manager: 'Albertine Masika'
+    phone: '',
+    email: 'itkinshasa1@gmail.com',
+    manager: '',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: true
   }
 ];
 
@@ -61,7 +36,7 @@ export const INITIAL_AUTHORIZED_USERS: AuthorizedUser[] = [
   {
     id: 'user-1',
     email: 'hr.rftcom@gmail.com',
-    name: 'RFTCOM Administrator',
+    name: 'Flow Easy Administrator',
     role: 'admin',
     assignedBranchId: 'branch-1',
     status: 'active',
@@ -240,7 +215,7 @@ export const INITIAL_STOCK_TRANSFERS: StockTransfer[] = [
     vehicleNumber: 'KN-8472-BG',
     remarks: 'Approved by Logistics Director. Urgent dispatch.',
     createdByEmail: 'hr.rftcom@gmail.com',
-    createdByName: 'RFTCOM Administrator',
+    createdByName: 'Flow Easy Administrator',
     createdAt: '2026-09-01T10:30:00Z',
     status: 'Completed'
   },
@@ -359,7 +334,7 @@ export const INITIAL_INVOICES: Invoice[] = [
     totalUSD: 5800,
     notes: 'Payment by bank transfer within 14 days. Official tax receipt included.',
     createdByEmail: 'hr.rftcom@gmail.com',
-    createdByName: 'RFTCOM Administrator',
+    createdByName: 'Flow Easy Administrator',
     createdAt: '2026-09-02T14:10:00Z',
     status: 'Paid'
   },
@@ -449,7 +424,7 @@ export const INITIAL_INVOICES: Invoice[] = [
     totalUSD: 2200,
     notes: 'Export commercial invoice - tax exempt. Direct USD settlement.',
     createdByEmail: 'hr.rftcom@gmail.com',
-    createdByName: 'RFTCOM Administrator',
+    createdByName: 'Flow Easy Administrator',
     createdAt: '2026-09-04T08:30:00Z',
     status: 'Paid'
   }

@@ -12,14 +12,18 @@ export interface AuthorizedUser {
 
 export interface Branch {
   id: string;
-  name: string;
-  code: string;
-  address: string;
+  name: string; // Location Name (e.g. KIn)
+  code: string; // Location code or short name
+  invPrefix?: string; // Inv Prefix (e.g. Test)
+  address: string; // Address (e.g. Gombe)
   city: string;
   phone: string;
-  email?: string;
+  email?: string; // Email ID (e.g. itkinshasa1@gmail.com)
   manager?: string;
   isHeadquarters?: boolean;
+  rccm?: string; // RCCM (e.g. 123test)
+  impot?: string; // Impo / NIF (e.g. 123test)
+  idNat?: string; // ID nat (e.g. 123test)
 }
 
 export interface CompanyProfile {

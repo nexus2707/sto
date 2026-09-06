@@ -9,7 +9,8 @@ import {
   ShieldCheck,
   RefreshCw,
   X,
-  LogOut
+  LogOut,
+  MapPin
 } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext';
 
@@ -26,7 +27,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose
 }) => {
-  const { currentUser, company, sheetConfig, syncWithGoogleSheet, logout } = useInventory();
+  const {
+    currentUser,
+    company,
+    sheetConfig,
+    syncWithGoogleSheet,
+    logout,
+    activeBranch,
+    resetBranchSelection
+  } = useInventory();
   const [isSyncing, setIsSyncing] = useState(false);
 
   const handleManualSync = async () => {
@@ -81,6 +90,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="lg:hidden p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
           >
             <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Active Branch Location Indicator */}
+        <div className="px-4 py-2.5 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between">
+          <div className="flex items-center space-x-2 min-w-0">
+            <div className="w-6 h-6 rounded bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0">
+              <MapPin className="w-3.5 h-3.5 text-blue-400" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                Operating Branch
+              </div>
+              <div className="text-xs font-bold text-white truncate" title={activeBranch?.name}>
+                {activeBranch?.name || 'Main Location'}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              resetBranchSelection();
+              if (window.innerWidth < 1024) onClose();
+            }}
+            className="text-[10px] text-blue-400 hover:text-blue-300 font-semibold px-2 py-0.5 rounded hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Switch Operating Branch Location"
+          >
+            Switch
           </button>
         </div>
 

@@ -19,6 +19,7 @@ import {
 } from '../data/mockData';
 import {
   createGoogleSpreadsheet,
+  fetchBranchesFromSheet,
   fetchStockMasterFromSheet,
   requestGoogleAccessToken,
   syncAllToGoogleSheet
@@ -28,6 +29,7 @@ interface InventoryContextType {
   currentUser: AuthorizedUser;
   authorizedUsers: AuthorizedUser[];
   branches: Branch[];
+  setBranches: React.Dispatch<React.SetStateAction<Branch[]>>;
   company: CompanyProfile;
   stockItems: StockItem[];
   transfers: StockTransfer[];
@@ -35,6 +37,12 @@ interface InventoryContextType {
   sheetConfig: GoogleSheetConfig;
   selectedBranchId: string;
   setSelectedBranchId: (id: string) => void;
+  // Branch location gate
+  isBranchConfirmed: boolean;
+  confirmBranchSelection: (branchId: string) => void;
+  resetBranchSelection: () => void;
+  activeBranch: Branch | null;
+  loadBranchesFromGoogleSheet: (sheetIdOrUrl?: string) => Promise<{ success: boolean; count: number; error?: string }>;
   // Auth & Session
   isAuthenticated: boolean;
   loginWithEmail: (email: string) => { success: boolean; message?: string };
@@ -76,14 +84,16 @@ const InventoryContext = createContext<InventoryContextType | null>(null);
 
 const STORAGE_KEYS = {
   users: 'rft_inventory_users_v2',
-  branches: 'rft_inventory_branches_v2',
-  company: 'rft_inventory_company_v2',
+  branches: 'floweasy_branches_v5',
+  company: 'rft_inventory_company_v3',
   stock: 'rft_inventory_stock_v2',
   transfers: 'rft_inventory_transfers_v2',
   invoices: 'rft_inventory_invoices_v2',
   sheetConfig: 'rft_inventory_sheet_v2',
   currentUserEmail: 'rft_inventory_cur_email_v2',
-  authStatus: 'rft_inventory_auth_status_v2'
+  authStatus: 'rft_inventory_auth_status_v2',
+  selectedBranch: 'floweasy_selected_branch_v5',
+  branchConfirmed: 'floweasy_branch_confirmed_v5'
 };
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -111,12 +121,37 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const [branches, setBranches] = useState<Branch[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.branches);
-    return saved ? JSON.parse(saved) : INITIAL_BRANCHES;
+    if (saved) {
+      try {
+        const parsed: Branch[] = JSON.parse(saved);
+        // Clean out any old mock data containing BRC / Brazzaville / Centre-Ville
+        const hasOldDemoData = parsed.some(
+          b => b.email?.includes('brazza.depot') || b.id === 'branch-brc' || b.address?.includes('Centre-Ville')
+        );
+        if (!hasOldDemoData && parsed.length > 0) {
+          return parsed;
+        }
+      } catch {
+        // fallback
+      }
+    }
+    return INITIAL_BRANCHES;
   });
 
   const [company, setCompany] = useState<CompanyProfile>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.company);
-    return saved ? JSON.parse(saved) : INITIAL_COMPANY;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (!parsed.companyName || parsed.companyName.includes('RFT')) {
+          parsed.companyName = 'Flow Easy';
+        }
+        return parsed;
+      } catch {
+        return INITIAL_COMPANY;
+      }
+    }
+    return INITIAL_COMPANY;
   });
 
   const [stockItems, setStockItems] = useState<StockItem[]>(() => {
@@ -134,7 +169,121 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return saved ? JSON.parse(saved) : INITIAL_INVOICES;
   });
 
-  const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.selectedBranch);
+    return saved || 'branch-kin';
+  });
+
+  const [isBranchConfirmed, setIsBranchConfirmed] = useState<boolean>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.branchConfirmed);
+    return saved === 'true';
+  });
+
+  const confirmBranchSelection = (branchId: string) => {
+    setSelectedBranchId(branchId);
+    setIsBranchConfirmed(true);
+    localStorage.setItem(STORAGE_KEYS.selectedBranch, branchId);
+    localStorage.setItem(STORAGE_KEYS.branchConfirmed, 'true');
+  };
+
+  const resetBranchSelection = () => {
+    setIsBranchConfirmed(false);
+    localStorage.setItem(STORAGE_KEYS.branchConfirmed, 'false');
+  };
+
+  const activeBranch: Branch | null =
+    branches.find(b => b.id === selectedBranchId) || (branches.length > 0 ? branches[0] : null);
+
+  const loadBranchesFromGoogleSheet = async (
+    sheetIdOrUrl?: string
+  ): Promise<{ success: boolean; count: number; error?: string }> => {
+    const rawInput = (sheetIdOrUrl || sheetConfig.spreadsheetId || '').trim();
+    if (!rawInput) {
+      return { success: false, count: 0, error: 'No Google Spreadsheet link or data provided' };
+    }
+
+    // 1. Direct CSV / Table detection: if input has commas and email/newline
+    if (rawInput.includes(',') && (rawInput.includes('@') || rawInput.includes('\n'))) {
+      const lines = rawInput.split('\n').map(l => l.trim()).filter(Boolean);
+      const rows: Branch[] = [];
+      lines.forEach((line, idx) => {
+        const parts = line.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+        const email = parts[0] || '';
+        const invPrefix = parts[1] || '';
+        const locationName = parts[2] || '';
+        const address = parts[3] || '';
+        const rccm = parts[4] || '';
+        const impot = parts[5] || '';
+        const idNat = parts[6] || '';
+
+        // Skip header
+        if (
+          email.toLowerCase().includes('email') ||
+          invPrefix.toLowerCase().includes('prefix') ||
+          locationName.toLowerCase().includes('location') ||
+          rccm.toLowerCase() === 'rccm'
+        ) {
+          return;
+        }
+
+        if (!locationName && !email && !invPrefix) return;
+
+        const safeName = locationName || (email ? email.split('@')[0] : `Branch ${idx + 1}`);
+        const safeCode = invPrefix || safeName.toUpperCase().slice(0, 4);
+        const safeId = `branch-${safeName.toLowerCase().replace(/[^a-z0-9]/g, '-') || idx + 1}`;
+
+        rows.push({
+          id: safeId,
+          name: safeName,
+          code: safeCode,
+          invPrefix: invPrefix || safeCode,
+          address: address || '',
+          city: locationName || '',
+          phone: '',
+          email: email || '',
+          rccm: rccm || '',
+          impot: impot || '',
+          idNat: idNat || '',
+          isHeadquarters: idx === 0
+        });
+      });
+
+      if (rows.length > 0) {
+        setBranches(rows);
+        localStorage.setItem(STORAGE_KEYS.branches, JSON.stringify(rows));
+        setSelectedBranchId(rows[0].id);
+        return { success: true, count: rows.length };
+      }
+    }
+
+    // 2. Google Sheets API / GVIZ fetch
+    const urlMatch = rawInput.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    const cleanId = urlMatch ? urlMatch[1] : rawInput;
+
+    try {
+      const fetched = await fetchBranchesFromSheet(cleanId, sheetConfig.accessToken);
+      if (fetched && fetched.length > 0) {
+        setBranches(fetched);
+        localStorage.setItem(STORAGE_KEYS.branches, JSON.stringify(fetched));
+        if (!fetched.some(b => b.id === selectedBranchId)) {
+          setSelectedBranchId(fetched[0].id);
+        }
+        // Save sheet config
+        setSheetConfig(prev => ({
+          ...prev,
+          spreadsheetId: cleanId,
+          spreadsheetUrl: rawInput.startsWith('http') ? rawInput : `https://docs.google.com/spreadsheets/d/${cleanId}`,
+          isConnected: true,
+          lastSyncTime: new Date().toLocaleTimeString()
+        }));
+        return { success: true, count: fetched.length };
+      } else {
+        return { success: false, count: 0, error: 'No non-empty branch records found in "branch name" tab' };
+      }
+    } catch (err: any) {
+      return { success: false, count: 0, error: err.message || 'Failed to fetch branches from sheet' };
+    }
+  };
 
   const [sheetConfig, setSheetConfig] = useState<GoogleSheetConfig>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.sheetConfig);
@@ -279,7 +428,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const logout = () => {
     setIsAuthenticated(false);
+    setIsBranchConfirmed(false);
     localStorage.setItem(STORAGE_KEYS.authStatus, 'false');
+    localStorage.setItem(STORAGE_KEYS.branchConfirmed, 'false');
   };
 
   const switchUser = (email: string) => {
@@ -423,11 +574,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Invoice creation
   const createInvoice = (data: Omit<Invoice, 'id' | 'invoiceNo' | 'createdByEmail' | 'createdByName' | 'createdAt'>) => {
     const branch = branches.find(b => b.id === data.branchId);
-    const branchPrefix = branch ? branch.code.split('-')[0] : 'INV';
+    const branchPrefix = branch?.invPrefix || (branch ? branch.code.split('-')[0] : 'INV');
     const prefix = data.type === 'facture' ? 'FAC' : 'PRO';
     const year = new Date().getFullYear();
     const count = invoices.filter(i => i.type === data.type).length + 1;
-    const invoiceNo = `${prefix}-${branchPrefix}-${year}-${String(count).padStart(4, '0')}`;
+    const invoiceNo = `${branchPrefix}-${prefix}-${year}-${String(count).padStart(4, '0')}`;
 
     const newInvoice: Invoice = {
       ...data,
@@ -686,6 +837,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         currentUser,
         authorizedUsers,
         branches,
+        setBranches,
         company,
         stockItems,
         transfers,
@@ -693,6 +845,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         sheetConfig,
         selectedBranchId,
         setSelectedBranchId,
+        isBranchConfirmed,
+        confirmBranchSelection,
+        resetBranchSelection,
+        activeBranch,
+        loadBranchesFromGoogleSheet,
         isAuthenticated,
         loginWithEmail,
         signupWithEmail,

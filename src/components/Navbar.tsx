@@ -8,7 +8,8 @@ import {
   ExternalLink,
   Plus,
   RefreshCw,
-  LogOut
+  LogOut,
+  MapPin
 } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext';
 
@@ -34,6 +35,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     branches,
     selectedBranchId,
     setSelectedBranchId,
+    activeBranch,
+    resetBranchSelection,
     sheetConfig,
     syncWithGoogleSheet,
     company
@@ -67,25 +70,31 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
 
         <div className="flex items-center space-x-2 sm:space-x-3">
-          <label
-            htmlFor="branch-selector-navbar"
-            className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider hidden xs:inline whitespace-nowrap"
+          <div className="flex items-center space-x-2 bg-blue-50/80 border border-blue-200 text-blue-900 px-3 py-1.5 rounded-lg shadow-2xs">
+            <MapPin className="w-4 h-4 text-blue-600 shrink-0" />
+            <div className="flex items-center space-x-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 hidden sm:inline">
+                Location:
+              </span>
+              <span className="text-xs sm:text-sm font-bold text-slate-900 truncate max-w-[120px] sm:max-w-[180px]">
+                {activeBranch?.name || 'Main Location'}
+              </span>
+              {activeBranch?.invPrefix && (
+                <span className="text-[10px] bg-white border border-blue-300 text-blue-800 px-1.5 py-0.2 rounded font-mono font-bold">
+                  Prefix: {activeBranch.invPrefix}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <button
+            id="navbar-switch-branch-btn"
+            onClick={resetBranchSelection}
+            className="text-[11px] font-semibold text-slate-600 hover:text-blue-700 hover:bg-slate-100 px-2.5 py-1.5 rounded border border-slate-200 transition-colors cursor-pointer"
+            title="Change active operating branch location"
           >
-            Active Branch:
-          </label>
-          <select
-            id="branch-selector-navbar"
-            value={selectedBranchId}
-            onChange={e => setSelectedBranchId(e.target.value)}
-            className="bg-slate-100 hover:bg-slate-200/80 border-none text-xs sm:text-sm rounded px-3 py-1.5 font-medium text-slate-800 cursor-pointer focus:ring-1 focus:ring-blue-600"
-          >
-            <option value="all">All Branches ({branches.length})</option>
-            {branches.map(b => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+            Switch Location
+          </button>
         </div>
       </div>
 
@@ -223,6 +232,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               <div className="border-t border-slate-100 px-4 pt-2 mt-1 space-y-1">
+                <button
+                  id="nav-switch-branch-location-btn"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    resetBranchSelection();
+                  }}
+                  className="w-full text-left text-xs font-medium text-slate-700 hover:text-blue-700 py-1 flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Switch Operating Location</span>
+                </button>
+
                 {setActiveTab && (
                   <button
                     id="nav-to-settings-btn"

@@ -13,10 +13,19 @@ import {
   AlertCircle,
   Lock,
   Key,
-  DollarSign
+  DollarSign,
+  Copy,
+  HelpCircle,
+  Info,
+  ShieldAlert
 } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext';
 import { AuthorizedUser, Branch } from '../types';
+import {
+  getOAuthClientId,
+  setOAuthClientId,
+  DEFAULT_OAUTH_CLIENT_ID
+} from '../services/googleSheets';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -39,6 +48,8 @@ export const SettingsView: React.FC = () => {
 
   // Google Sheet Form State
   const [spreadsheetIdInput, setSpreadsheetIdInput] = useState(sheetConfig.spreadsheetId);
+  const [oauthClientIdInput, setOauthClientIdInput] = useState(getOAuthClientId());
+  const [copiedOrigin, setCopiedOrigin] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isFetchingStock, setIsFetchingStock] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
@@ -78,6 +89,31 @@ export const SettingsView: React.FC = () => {
     connectGoogleSheet(id);
     setStatusMessage('Google Spreadsheet ID updated & connected.');
     setTimeout(() => setStatusMessage(null), 4000);
+  };
+
+  const handleSaveOAuthClientId = () => {
+    if (!oauthClientIdInput.trim()) {
+      alert('Please enter a valid Google OAuth Client ID or reset to default.');
+      return;
+    }
+    setOAuthClientId(oauthClientIdInput.trim());
+    setStatusMessage('Google OAuth Client ID saved.');
+    setTimeout(() => setStatusMessage(null), 4000);
+  };
+
+  const handleResetOAuthClientId = () => {
+    setOAuthClientId(DEFAULT_OAUTH_CLIENT_ID);
+    setOauthClientIdInput(DEFAULT_OAUTH_CLIENT_ID);
+    setStatusMessage('Reset OAuth Client ID to default.');
+    setTimeout(() => setStatusMessage(null), 4000);
+  };
+
+  const handleCopyOrigin = () => {
+    if (typeof window !== 'undefined') {
+      navigator.clipboard.writeText(window.location.origin);
+      setCopiedOrigin(true);
+      setTimeout(() => setCopiedOrigin(false), 3000);
+    }
   };
 
   const handleCreateNewSheet = async () => {
@@ -366,55 +402,128 @@ export const SettingsView: React.FC = () => {
                 <span>{isFetchingStock ? 'Retrieving...' : 'Get Stock Master from Google Sheet'}</span>
               </button>
             </div>
+
+            {/* Google OAuth & Error 400 Origin Mismatch Guide */}
+            <div className="pt-6 border-t border-slate-100 space-y-4">
+              <div className="flex items-start gap-3 p-4 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-950">
+                <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-2">
+                  <div className="font-bold text-amber-900 text-sm">
+                    Fixing "Access blocked: Error 400: origin_mismatch"
+                  </div>
+                  <p className="text-xs text-amber-900 leading-relaxed">
+                    Google OAuth requires the exact web address (Origin URL) of this app to be registered in your Google Cloud Console project under <strong>Authorized JavaScript origins</strong>. When you open the app on a new URL or preview domain that isn't on that list, Google blocks the sign-in popup with this error.
+                  </p>
+                  <div className="pt-1 flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-slate-800">Your Current App Origin:</span>
+                    <code className="px-2.5 py-1 bg-white border border-amber-300 rounded-md font-mono text-[11px] text-blue-900 font-bold select-all">
+                      {typeof window !== 'undefined' ? window.location.origin : 'https://...'}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={handleCopyOrigin}
+                      className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-md font-semibold text-[11px] flex items-center space-x-1 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>{copiedOrigin ? 'Copied to Clipboard!' : 'Copy Origin URL'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* OAuth Client ID customizer */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Google Cloud OAuth 2.0 Client ID:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleResetOAuthClientId}
+                    className="text-[11px] text-blue-700 hover:text-blue-900 font-semibold underline cursor-pointer"
+                  >
+                    Reset to Default
+                  </button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    id="google-oauth-client-id-input"
+                    type="text"
+                    value={oauthClientIdInput}
+                    onChange={e => setOauthClientIdInput(e.target.value)}
+                    placeholder="Enter your Google OAuth Client ID (.apps.googleusercontent.com)"
+                    className="flex-1 px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-blue-900 font-mono bg-white"
+                  />
+                  <button
+                    id="save-oauth-client-id-btn"
+                    onClick={handleSaveOAuthClientId}
+                    className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-700 transition-colors whitespace-nowrap shadow-xs cursor-pointer"
+                  >
+                    Save Client ID
+                  </button>
+                </div>
+                <div className="text-[11px] text-slate-500 space-y-1 leading-relaxed">
+                  <p>
+                    <strong>How to register your origin in Google Cloud Console:</strong>
+                  </p>
+                  <ol className="list-decimal list-inside space-y-0.5 text-slate-600 pl-1">
+                    <li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" className="text-blue-700 underline font-semibold">Google Cloud Console &gt; Credentials</a>.</li>
+                    <li>Click on your <strong>OAuth 2.0 Client ID</strong> (Web application).</li>
+                    <li>Under <strong>Authorized JavaScript origins</strong>, click <strong>+ ADD URI</strong> and paste your origin URL (<code className="text-slate-800 bg-slate-200 px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}</code>).</li>
+                    <li>Click <strong>Save</strong>. (Note: Google changes take 1 to 5 minutes to propagate worldwide).</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Predefined Columns Schema Documentation */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
-              Predefined Google Sheet Schema & Column Mapping
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="font-bold text-slate-900 mb-1">Sheet Tab: "StockMaster"</div>
-                <div className="font-mono text-[11px] text-slate-600 space-y-0.5">
-                  <p>A: ItemCode</p>
-                  <p>B: Name / Description</p>
-                  <p>C: Category</p>
-                  <p>D: Unit</p>
-                  <p>E: UnitCostFC</p>
-                  <p>F: UnitPriceFC</p>
-                  <p>G: TotalStock</p>
-                  <p>H+: Branch stock columns</p>
-                </div>
-              </div>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+                <span>Unified 28-Column Branch Location Ledger Format</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Standard header structure for individual branch/location sheets (e.g. <code>KIN</code>, <code>BRC</code>, <code>LUSI</code>) tracking Transfers, Factures, Proformas, and Purchases.
+              </p>
+            </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="font-bold text-slate-900 mb-1">Sheet Tab: "StockTransfers"</div>
-                <div className="font-mono text-[11px] text-slate-600 space-y-0.5">
-                  <p>A: ChallanNo</p>
-                  <p>B: Date</p>
-                  <p>C: FromBranch</p>
-                  <p>D: ToBranch</p>
-                  <p>E: TotalQuantity</p>
-                  <p>F: CarrierOrDriver</p>
-                  <p>G: VehiclePlate</p>
-                  <p>H: CreatedByEmail</p>
-                  <p>I: ItemsDetail</p>
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 overflow-x-auto">
+              <div className="text-[11px] font-mono text-slate-700 whitespace-nowrap leading-relaxed">
+                <div className="font-bold text-blue-900 pb-2 mb-2 border-b border-slate-200 flex items-center justify-between">
+                  <span>28 Columns Sequence (Copy to Sheet Row 1):</span>
+                  <span className="text-[10px] text-slate-500 font-sans font-normal">A to AB</span>
                 </div>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="font-bold text-slate-900 mb-1">Sheet Tab: "Invoices"</div>
-                <div className="font-mono text-[11px] text-slate-600 space-y-0.5">
-                  <p>A: InvoiceNo</p>
-                  <p>B: Type (Facture/Proforma)</p>
-                  <p>C: Date</p>
-                  <p>D: BranchName</p>
-                  <p>E: CustomerName</p>
-                  <p>F: WithTVA (TRUE/FALSE)</p>
-                  <p>G: TotalFC</p>
-                  <p>H: TotalUSD</p>
-                  <p>I: CreatedByEmail</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-[11px]">
+                  <span className="p-1.5 bg-white rounded border border-slate-200">A: Challan/Bill No.</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">B: Challan/Bill Date</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">C: Due date</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">D: Transaction type</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">E: Client / Supplier Name</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">F: Client Address</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">G: From</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">H: To</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">I: SKU</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">J: Group</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">K: Item Name</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">L: Performa Qty</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">M: Inward</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">N: Outward</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">O: Unit</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">P: Taux</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">Q: Rate fc</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">R: Rate usd</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">S: Subtotal FC</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">T: Subtotal USD</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">U: TVA 16% FC</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">V: Total-FC</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">W: Total-USD</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">X: Balance qty</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">Y: Remarks</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">Z: CreatedByEmail</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">AA: Driver Name</span>
+                  <span className="p-1.5 bg-white rounded border border-slate-200">AB: Status</span>
                 </div>
               </div>
             </div>
