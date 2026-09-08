@@ -249,7 +249,7 @@ export function requestGoogleAccessToken(promptConsent: boolean = true): Promise
         },
         error_callback: (err: any) => reject(err)
       });
-      client.requestAccessToken({ prompt: promptConsent ? 'consent' : '' });
+      client.requestAccessToken({ prompt: 'consent' });
     } catch (e) {
       reject(e);
     }
