@@ -40,14 +40,11 @@ const MainAppContent: React.FC = () => {
 
   // 1. If the user is not authenticated or email is not authorized, show security AuthGate
   if (!isAuthenticated || !isUserValid) {
-    return <AuthGate />;
+    return <AuthGate unauthorizedEmail={!isUserValid ? currentUser.email : undefined} />;
   }
 
-  // 2. User must select their operating branch location before entering the dashboard
-  // "give option to select branch before show the all dashboad so that other branch user not enter in other branch locations"
-  if (!isBranchConfirmed || !activeBranch) {
-    return <BranchSelectGate />;
-  }
+  // User requested: "Operating Branch / Location * remove this option , direct get into app dashboard"
+  // Direct entry into app dashboard without BranchSelectGate prompt.
 
   return (
     <div className="flex h-screen w-screen bg-[#f8fafc] text-slate-900 font-sans overflow-hidden antialiased">

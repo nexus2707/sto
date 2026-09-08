@@ -1,7 +1,7 @@
-import { Branch, CompanyProfile, StockItem, StockTransfer, Invoice, AuthorizedUser } from '../types';
+import { Branch, CompanyProfile, StockItem, StockTransfer, Invoice, AuthorizedUser, MasterStockItem } from '../types';
 
 export const INITIAL_COMPANY: CompanyProfile = {
-  companyName: 'Flow Easy',
+  companyName: 'Easy Flow',
   taxNumber: 'CD-KIN-TVA-00984218-A',
   nationalId: '01-83-N45209P',
   rccm: 'CD/KIN/RCCM/20-B-08412',
@@ -16,58 +16,444 @@ export const INITIAL_COMPANY: CompanyProfile = {
 
 export const INITIAL_BRANCHES: Branch[] = [
   {
-    id: 'branch-kin',
-    name: 'KIn',
-    code: 'KIN',
-    invPrefix: 'Test',
-    address: 'Gombe',
-    city: 'Kinshasa',
+    id: 'branch-a1',
+    name: 'A1-SHOP NO1',
+    code: 'Lusi',
+    invPrefix: 'Lusi',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
     phone: '',
     email: 'itkinshasa1@gmail.com',
-    manager: '',
+    manager: 'Shop Manager 1',
     rccm: '123test',
     impot: '123test',
     idNat: '123test',
     isHeadquarters: true
+  },
+  {
+    id: 'branch-a2',
+    name: 'A2-SHOP NO2',
+    code: 'BRC',
+    invPrefix: 'BRC',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 2',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-a3',
+    name: 'A3-SHOP NO3',
+    code: 'Test',
+    invPrefix: 'Test',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 3',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-a4',
+    name: 'A4-SHOP NO4',
+    code: 'A4',
+    invPrefix: 'A4',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 4',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-a5',
+    name: 'A5-SHOP NO5',
+    code: 'A5',
+    invPrefix: 'A5',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 5',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-a6',
+    name: 'A6-SHOP NO6',
+    code: 'A6',
+    invPrefix: 'A6',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 6',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-a7',
+    name: 'A7-SHOP NO7',
+    code: 'A7',
+    invPrefix: 'A7',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 7',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-a8',
+    name: 'A8-SHOP NO8',
+    code: 'A8',
+    invPrefix: 'A8',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 8',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-a9',
+    name: 'A9-SHOP-KFK9',
+    code: 'A9',
+    invPrefix: 'A9',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 9',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-aa10',
+    name: 'AA10SHOP NO-10',
+    code: 'AA10',
+    invPrefix: 'AA10',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 10',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-aa11',
+    name: 'AA11-SHOP NO11',
+    code: 'AA11',
+    invPrefix: 'AA11',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 11',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-aa12',
+    name: 'AA12-SHOP NO12',
+    code: 'AA12',
+    invPrefix: 'AA12',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 12',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-aa13',
+    name: 'AA13-SHOP NO13',
+    code: 'AA13',
+    invPrefix: 'AA13',
+    address: 'Commercial Avenue',
+    city: 'Gombe',
+    phone: '',
+    email: '',
+    manager: 'Shop Manager 13',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
+  },
+  {
+    id: 'branch-buro',
+    name: 'Buro',
+    code: 'BUR',
+    invPrefix: 'BUR',
+    address: 'Central Depot',
+    city: 'Gombe',
+    phone: '',
+    email: 'buro@floweasy.com',
+    manager: 'Buro Depot Manager',
+    rccm: '123test',
+    impot: '123test',
+    idNat: '123test',
+    isHeadquarters: false
   }
 ];
 
 export const INITIAL_AUTHORIZED_USERS: AuthorizedUser[] = [
   {
-    id: 'user-1',
+    id: 'user-admin',
     email: 'hr.rftcom@gmail.com',
-    name: 'Flow Easy Administrator',
+    name: 'Easy Flow Administrator',
     role: 'admin',
-    assignedBranchId: 'branch-1',
+    assignedBranchId: 'branch-a1',
+    assignedBranchName: 'A1-SHOP NO1',
     status: 'active',
     addedAt: '2026-01-10T08:00:00Z'
   },
   {
-    id: 'user-2',
-    email: 'manager.kin@rftcom.com',
-    name: 'Michel Kabongo (Kinshasa Manager)',
+    id: 'user-kin',
+    email: 'itkinshasa1@gmail.com',
+    name: 'A1 Operations',
     role: 'creator',
-    assignedBranchId: 'branch-1',
+    assignedBranchId: 'branch-a1',
+    assignedBranchName: 'A1-SHOP NO1',
     status: 'active',
-    addedAt: '2026-01-15T09:30:00Z'
+    addedAt: '2026-02-01T08:00:00Z'
+  }
+];
+
+export const INITIAL_MASTER_ITEMS: MasterStockItem[] = [
+  {
+    id: 'm-1',
+    itemCode: 'DS-K1T808MFWX',
+    name: 'ACESS CONTROLR TERML-DS-K1T808MFWX',
+    unit: 'Pcs',
+    branchStocks: {
+      'Buro': 6,
+      'buro': 6,
+      'A1-SHOP NO1': 6,
+      'a1-shop no1': 6,
+      'KIn': 10,
+      'kin': 10,
+      'Gombe': 4,
+      'gombe': 4
+    },
+    totalStock: 26
   },
   {
-    id: 'user-3',
-    email: 'sarah.lub@rftcom.com',
-    name: 'Sarah Ilunga (Lubumbashi Lead)',
-    role: 'creator',
-    assignedBranchId: 'branch-2',
-    status: 'active',
-    addedAt: '2026-01-20T10:00:00Z'
+    id: 'm-2',
+    itemCode: 'DS-K2602T',
+    name: 'ACESS CONTROLR-2 DOOR-DS-K2602T',
+    unit: 'Pcs',
+    branchStocks: {
+      'Buro': 1,
+      'buro': 1,
+      'A1-SHOP NO1': 1,
+      'a1-shop no1': 1,
+      'KIn': 5,
+      'kin': 5,
+      'Gombe': 2,
+      'gombe': 2
+    },
+    totalStock: 9
   },
   {
-    id: 'user-4',
-    email: 'warehouse.clerk@rftcom.com',
-    name: 'Antoine Mwamba (Warehouse Clerk)',
-    role: 'staff',
-    assignedBranchId: 'branch-1',
-    status: 'active',
-    addedAt: '2026-02-01T14:15:00Z'
+    id: 'm-3',
+    itemCode: 'DS-KAS261',
+    name: 'ACESS CONTROLR-DS-KAS261',
+    unit: 'Pcs',
+    branchStocks: {
+      'Buro': 7,
+      'buro': 7,
+      'A1-SHOP NO1': 7,
+      'a1-shop no1': 7,
+      'KIn': 12,
+      'kin': 12,
+      'Gombe': 8,
+      'gombe': 8
+    },
+    totalStock: 34
+  },
+  {
+    id: 'm-4',
+    itemCode: 'DS-KAS808-STD',
+    name: 'ACESS CONTROLR-DS-KAS808(O-STD)',
+    unit: 'Pcs',
+    branchStocks: {
+      'Buro': 2,
+      'buro': 2,
+      'A1-SHOP NO1': 2,
+      'a1-shop no1': 2,
+      'KIn': 8,
+      'kin': 8,
+      'Gombe': 3,
+      'gombe': 3
+    },
+    totalStock: 15
+  },
+  {
+    id: 'm-5',
+    itemCode: 'ADP-12V',
+    name: 'ADP AC TO DC-12V',
+    unit: 'Pcs',
+    branchStocks: {
+      'Buro': 27,
+      'buro': 27,
+      'A1-SHOP NO1': 27,
+      'a1-shop no1': 27,
+      'KIn': 45,
+      'kin': 45,
+      'Gombe': 30,
+      'gombe': 30
+    },
+    totalStock: 129
+  },
+  {
+    id: 'm-6',
+    itemCode: 'CBL-CAT6-305M',
+    name: 'CAT6 UTP NETWORK CABLE 305M',
+    unit: 'Roll',
+    branchStocks: {
+      'Buro': 14,
+      'buro': 14,
+      'A1-SHOP NO1': 14,
+      'a1-shop no1': 14,
+      'KIn': 25,
+      'kin': 25,
+      'Gombe': 10,
+      'gombe': 10
+    },
+    totalStock: 63
+  },
+  {
+    id: 'm-7',
+    itemCode: 'SW-POE-8P-GB',
+    name: 'POE SWITCH 8 PORT GIGABIT',
+    unit: 'Pcs',
+    branchStocks: {
+      'Buro': 8,
+      'buro': 8,
+      'A1-SHOP NO1': 8,
+      'a1-shop no1': 8,
+      'KIn': 16,
+      'kin': 16,
+      'Gombe': 5,
+      'gombe': 5
+    },
+    totalStock: 37
+  },
+  {
+    id: 'm-8',
+    itemCode: 'CAM-IP-4MP-DM',
+    name: 'IP CAMERA 4MP DOME OUTDOOR',
+    unit: 'Pcs',
+    branchStocks: {
+      'Buro': 19,
+      'buro': 19,
+      'A1-SHOP NO1': 19,
+      'a1-shop no1': 19,
+      'KIn': 35,
+      'kin': 35,
+      'Gombe': 12,
+      'gombe': 12
+    },
+    totalStock: 85
+  },
+  {
+    id: 'm-9',
+    itemCode: 'NVR-16CH-4K',
+    name: 'NVR 16 CHANNEL 4K H.265+',
+    unit: 'Unit',
+    branchStocks: {
+      'Buro': 4,
+      'buro': 4,
+      'A1-SHOP NO1': 4,
+      'a1-shop no1': 4,
+      'KIn': 9,
+      'kin': 9,
+      'Gombe': 3,
+      'gombe': 3
+    },
+    totalStock: 20
+  },
+  {
+    id: 'm-10',
+    itemCode: 'LCK-MAG-280KG',
+    name: 'MAGNETIC LOCK 280KG 600LBS',
+    unit: 'Pcs',
+    branchStocks: {
+      'Buro': 11,
+      'buro': 11,
+      'A1-SHOP NO1': 11,
+      'a1-shop no1': 11,
+      'KIn': 22,
+      'kin': 22,
+      'Gombe': 8,
+      'gombe': 8
+    },
+    totalStock: 52
+  },
+  {
+    id: 'm-11',
+    itemCode: 'BTN-EXIT-NO-NC',
+    name: 'STAINLESS STEEL EXIT BUTTON NO/NC',
+    unit: 'Pcs',
+    branchStocks: {
+      'Buro': 25,
+      'buro': 25,
+      'A1-SHOP NO1': 20,
+      'a1-shop no1': 20,
+      'KIn': 30,
+      'kin': 30,
+      'Gombe': 15,
+      'gombe': 15
+    },
+    totalStock: 90
+  },
+  {
+    id: 'm-12',
+    itemCode: 'RDR-EM-RFID-125K',
+    name: 'RFID CARD READER 125KHZ EM-ID',
+    unit: 'Pcs',
+    branchStocks: {
+      'Buro': 15,
+      'buro': 15,
+      'A1-SHOP NO1': 12,
+      'a1-shop no1': 12,
+      'KIn': 18,
+      'kin': 18,
+      'Gombe': 9,
+      'gombe': 9
+    },
+    totalStock: 54
   }
 ];
 
@@ -182,108 +568,7 @@ export const INITIAL_STOCK_ITEMS: StockItem[] = [
   }
 ];
 
-export const INITIAL_STOCK_TRANSFERS: StockTransfer[] = [
-  {
-    id: 'trf-001',
-    challanNo: 'CHL-B01-2026-0081',
-    date: '2026-09-01',
-    fromBranchId: 'branch-1',
-    fromBranchName: 'Kinshasa Central Depot & Showroom',
-    toBranchId: 'branch-2',
-    toBranchName: 'Lubumbashi Industrial Hub',
-    items: [
-      {
-        itemCode: 'ITM-ELEC-001',
-        itemName: 'Industrial Solar Inverter 5KVA 48V Hybrid',
-        quantity: 4,
-        unit: 'Unit',
-        unitCostFC: 2280000,
-        remarks: 'Priority replenishment for mining client order'
-      },
-      {
-        itemCode: 'ITM-CAB-003',
-        itemName: 'Heavy Duty Armoured Power Cable 4x16mm (100m Roll)',
-        quantity: 10,
-        unit: 'Roll',
-        unitCostFC: 997500,
-        remarks: 'Direct warehouse transfer'
-      }
-    ],
-    totalItems: 2,
-    totalQuantity: 14,
-    driverOrCarrier: 'Trans-Katanga Express (Driver: Patrick)',
-    vehicleNumber: 'KN-8472-BG',
-    remarks: 'Approved by Logistics Director. Urgent dispatch.',
-    createdByEmail: 'hr.rftcom@gmail.com',
-    createdByName: 'Flow Easy Administrator',
-    createdAt: '2026-09-01T10:30:00Z',
-    status: 'Completed'
-  },
-  {
-    id: 'trf-002',
-    challanNo: 'CHL-B04-2026-0044',
-    date: '2026-09-02',
-    fromBranchId: 'branch-4',
-    fromBranchName: 'Matadi Port Transit Warehouse',
-    toBranchId: 'branch-1',
-    toBranchName: 'Kinshasa Central Depot & Showroom',
-    items: [
-      {
-        itemCode: 'ITM-ELEC-002',
-        itemName: 'Lithium LiFePO4 Battery Bank 48V 100Ah',
-        quantity: 12,
-        unit: 'Pack',
-        unitCostFC: 3420000,
-        remarks: 'Customs cleared container arrival'
-      }
-    ],
-    totalItems: 1,
-    totalQuantity: 12,
-    driverOrCarrier: 'Matadi Logistics Fleet 03 (Driver: Joseph)',
-    vehicleNumber: 'KC-1209-AB',
-    remarks: 'Port shipment reception transfer to Kinshasa central store.',
-    createdByEmail: 'manager.kin@rftcom.com',
-    createdByName: 'Michel Kabongo',
-    createdAt: '2026-09-02T15:45:00Z',
-    status: 'Completed'
-  },
-  {
-    id: 'trf-003',
-    challanNo: 'CHL-B02-2026-0019',
-    date: '2026-09-03',
-    fromBranchId: 'branch-2',
-    fromBranchName: 'Lubumbashi Industrial Hub',
-    toBranchId: 'branch-3',
-    toBranchName: 'Kolwezi Mining Logistics Branch',
-    items: [
-      {
-        itemCode: 'ITM-SAF-005',
-        itemName: 'Mining Safety High-Vis Helmet with Ear Defenders',
-        quantity: 50,
-        unit: 'Pcs',
-        unitCostFC: 85500,
-        remarks: 'Stock transfer for Kolwezi open pit contract'
-      },
-      {
-        itemCode: 'ITM-HYD-006',
-        itemName: 'Submersible Borehole Deep Water Pump 2.2KW',
-        quantity: 2,
-        unit: 'Unit',
-        unitCostFC: 1425000,
-        remarks: 'Urgent pumping installation'
-      }
-    ],
-    totalItems: 2,
-    totalQuantity: 52,
-    driverOrCarrier: 'Lualaba Fast Freight',
-    vehicleNumber: 'HK-9941-CD',
-    remarks: 'Stock transfer to Kolwezi regional hub',
-    createdByEmail: 'sarah.lub@rftcom.com',
-    createdByName: 'Sarah Ilunga',
-    createdAt: '2026-09-03T11:20:00Z',
-    status: 'In Transit'
-  }
-];
+export const INITIAL_STOCK_TRANSFERS: StockTransfer[] = [];
 
 export const INITIAL_INVOICES: Invoice[] = [
   {
@@ -293,7 +578,7 @@ export const INITIAL_INVOICES: Invoice[] = [
     date: '2026-09-02',
     dueDate: '2026-09-16',
     branchId: 'branch-1',
-    branchName: 'Kinshasa Central Depot & Showroom',
+    branchName: 'KIn',
     branchAddress: 'Av. du Commerce No. 142, Quartier Commercial, Gombe, Kinshasa',
     branchPhone: '+243 81 222 3344',
     branchEmail: 'kinshasa.central@rftcom-trading.com',
@@ -334,7 +619,7 @@ export const INITIAL_INVOICES: Invoice[] = [
     totalUSD: 5800,
     notes: 'Payment by bank transfer within 14 days. Official tax receipt included.',
     createdByEmail: 'hr.rftcom@gmail.com',
-    createdByName: 'Flow Easy Administrator',
+    createdByName: 'Easy Flow Administrator',
     createdAt: '2026-09-02T14:10:00Z',
     status: 'Paid'
   },
@@ -396,7 +681,7 @@ export const INITIAL_INVOICES: Invoice[] = [
     type: 'facture',
     date: '2026-09-04',
     branchId: 'branch-1',
-    branchName: 'Kinshasa Central Depot & Showroom',
+    branchName: 'KIn',
     branchAddress: 'Av. du Commerce No. 142, Quartier Commercial, Gombe, Kinshasa',
     branchPhone: '+243 81 222 3344',
     branchEmail: 'kinshasa.central@rftcom-trading.com',
@@ -424,7 +709,7 @@ export const INITIAL_INVOICES: Invoice[] = [
     totalUSD: 2200,
     notes: 'Export commercial invoice - tax exempt. Direct USD settlement.',
     createdByEmail: 'hr.rftcom@gmail.com',
-    createdByName: 'Flow Easy Administrator',
+    createdByName: 'Easy Flow Administrator',
     createdAt: '2026-09-04T08:30:00Z',
     status: 'Paid'
   }

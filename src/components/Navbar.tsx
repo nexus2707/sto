@@ -29,6 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const {
     currentUser,
+    isAdmin,
     authorizedUsers,
     switchUser,
     logout,
@@ -87,14 +88,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          <button
-            id="navbar-switch-branch-btn"
-            onClick={resetBranchSelection}
-            className="text-[11px] font-semibold text-slate-600 hover:text-blue-700 hover:bg-slate-100 px-2.5 py-1.5 rounded border border-slate-200 transition-colors cursor-pointer"
-            title="Change active operating branch location"
-          >
-            Switch Location
-          </button>
+          {isAdmin && (
+            <button
+              id="navbar-switch-branch-btn"
+              onClick={resetBranchSelection}
+              className="text-[11px] font-semibold text-slate-600 hover:text-blue-700 hover:bg-slate-100 px-2.5 py-1.5 rounded border border-slate-200 transition-colors cursor-pointer"
+              title="Change active operating branch location (Admin only)"
+            >
+              Switch Location
+            </button>
+          )}
         </div>
       </div>
 
@@ -232,17 +235,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               <div className="border-t border-slate-100 px-4 pt-2 mt-1 space-y-1">
-                <button
-                  id="nav-switch-branch-location-btn"
-                  onClick={() => {
-                    setShowUserMenu(false);
-                    resetBranchSelection();
-                  }}
-                  className="w-full text-left text-xs font-medium text-slate-700 hover:text-blue-700 py-1 flex items-center space-x-1.5 cursor-pointer"
-                >
-                  <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Switch Operating Location</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    id="nav-switch-branch-location-btn"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      resetBranchSelection();
+                    }}
+                    className="w-full text-left text-xs font-medium text-slate-700 hover:text-blue-700 py-1 flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Switch Operating Location</span>
+                  </button>
+                )}
 
                 {setActiveTab && (
                   <button

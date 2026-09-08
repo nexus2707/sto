@@ -29,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const {
     currentUser,
+    isAdmin,
     company,
     sheetConfig,
     syncWithGoogleSheet,
@@ -108,16 +109,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
           </div>
-          <button
-            onClick={() => {
-              resetBranchSelection();
-              if (window.innerWidth < 1024) onClose();
-            }}
-            className="text-[10px] text-blue-400 hover:text-blue-300 font-semibold px-2 py-0.5 rounded hover:bg-slate-800 transition-colors cursor-pointer"
-            title="Switch Operating Branch Location"
-          >
-            Switch
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => {
+                resetBranchSelection();
+                if (window.innerWidth < 1024) onClose();
+              }}
+              className="text-[10px] text-blue-400 hover:text-blue-300 font-semibold px-2 py-0.5 rounded hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Switch Operating Branch Location (Admin only)"
+            >
+              Switch
+            </button>
+          )}
         </div>
 
         {/* Navigation Section */}

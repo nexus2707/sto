@@ -17,16 +17,18 @@ import { UserRole } from '../types';
 
 interface AuthGateProps {
   onSuccess?: () => void;
+  unauthorizedEmail?: string;
 }
 
-export const AuthGate: React.FC<AuthGateProps> = ({ onSuccess }) => {
+export const AuthGate: React.FC<AuthGateProps> = ({ onSuccess, unauthorizedEmail }) => {
   const {
     company,
     branches,
     authorizedUsers,
     loginWithEmail,
     signupWithEmail,
-    addAuthorizedUser
+    addAuthorizedUser,
+    currentUser
   } = useInventory();
 
   const [activeTab, setActiveTab] = useState<'login' | 'signup' | 'whitelist'>('login');
@@ -180,6 +182,22 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSuccess }) => {
 
         {/* Content Body */}
         <div className="p-6 space-y-6">
+          {/* Explicit Unauthorized User Warning */}
+          {(unauthorizedEmail || loginError) && (
+            <div className="p-4 bg-rose-950/80 border-2 border-rose-500/80 rounded-xl text-rose-100 space-y-2 shadow-lg">
+              <div className="flex items-center gap-2.5 text-rose-300 font-extrabold text-sm sm:text-base">
+                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+                <span>Warning: You are not an Authorized person to use it.</span>
+              </div>
+              <p className="text-xs text-rose-200/90 leading-relaxed">
+                The account currently used in your browser (<strong>{unauthorizedEmail || loginEmail || currentUser.email}</strong>) is not in the authorized directory.
+              </p>
+              <p className="text-[11px] text-rose-300/80 leading-relaxed">
+                Authorized user emails are stored and automatically fetched from the Google Sheet tab <strong>"address" (Column A)</strong>. Only the administrator (<strong>hr.rftcom@gmail.com</strong>) has access to authorize accounts or make administrative changes.
+              </p>
+            </div>
+          )}
+
           {/* Security Policy Reminder Callout */}
           <div className="p-3 bg-blue-950/40 border border-blue-800/50 rounded-xl text-xs text-blue-200 flex items-start gap-2.5">
             <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowRightLeft,
   Plus,
@@ -11,16 +11,22 @@ import {
   Trash2,
   Eye,
   CheckCircle2,
+  Check,
   Clock,
   ShieldCheck,
   AlertTriangle,
   Building2,
   Truck,
-  UserCheck
+  UserCheck,
+  RotateCw,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext';
 import { StockTransfer, TransferItem } from '../types';
 import { exportTransferChallanPDF } from '../services/pdfExport';
+import { saveTransferToGoogleSheets, requestGoogleAccessToken, getStoredAccessToken } from '../services/googleSheets';
+import { NewTransferModal } from './NewTransferModal';
+import { ChallanPreviewModal } from './ChallanPreviewModal';
 
 interface StockTransfersViewProps {
   isCreateOpen?: boolean;
@@ -42,17 +48,86 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
     updateTransfer,
     deleteTransfer,
     canAlterTransfer,
-    canDeleteTransfer
+    canDeleteTransfer,
+    syncTransfersFromSheet,
+    sheetConfig,
+    setSheetConfig,
+    isTransferSyncedToSheet,
+    syncTransferToSheets,
+    authorizeGoogleAndSyncAll
   } = useInventory();
 
   const [search, setSearch] = useState('');
   const [filterBranch, setFilterBranch] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [isRefreshingSheet, setIsRefreshingSheet] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+  const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
+  const [syncingTransferId, setSyncingTransferId] = useState<string | null>(null);
+  const [isSyncingAllPending, setIsSyncingAllPending] = useState(false);
+
+  const unsyncedTransfers = transfers.filter(t => !isTransferSyncedToSheet(t.id));
+
+  const handleSyncSingleTransfer = async (t: StockTransfer) => {
+    setSyncingTransferId(t.id);
+    try {
+      const res = await syncTransferToSheets(t);
+      if (res.success) {
+        setRefreshNotice(`Challan #${t.challanNo} successfully saved to Google Sheet tabs "buro" and "club"!`);
+      } else {
+        alert(`Could not save Challan #${t.challanNo} to Google Sheets: ${res.error || 'Please re-authorize Google Sheets.'}`);
+      }
+    } catch (err: any) {
+      alert(`Sync error: ${err.message}`);
+    } finally {
+      setSyncingTransferId(null);
+    }
+  };
+
+  const handleSyncAllPending = async () => {
+    setIsSyncingAllPending(true);
+    try {
+      const res = await authorizeGoogleAndSyncAll();
+      if (res.success) {
+        setRefreshNotice(`Successfully saved ${res.syncedCount} pending transfer(s) to Google Sheet tabs "buro" and "club"!`);
+      } else {
+        alert(`Sync failed: ${res.error || 'Please re-authorize Google Sheets in Settings.'}`);
+      }
+    } catch (err: any) {
+      alert(`Sync error: ${err.message}`);
+    } finally {
+      setIsSyncingAllPending(false);
+    }
+  };
+
+  const handleRefreshFromSheet = async () => {
+    setIsRefreshingSheet(true);
+    setRefreshNotice(null);
+    try {
+      const res = await syncTransfersFromSheet();
+      if (res.success) {
+        setRefreshNotice(`Successfully loaded ${res.count} transfer(s) from your Google Sheet.`);
+      } else {
+        setRefreshNotice(res.error || 'Failed to fetch from sheet.');
+      }
+    } catch (err: any) {
+      setRefreshNotice(err.message || 'Error fetching transfers.');
+    } finally {
+      setIsRefreshingSheet(false);
+      setTimeout(() => setRefreshNotice(null), 6000);
+    }
+  };
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(isCreateOpen);
   const [viewChallan, setViewChallan] = useState<StockTransfer | null>(null);
   const [editingTransfer, setEditingTransfer] = useState<StockTransfer | null>(null);
+
+  useEffect(() => {
+    if (isCreateOpen) {
+      setIsModalOpen(true);
+    }
+  }, [isCreateOpen]);
 
   // Form State
   const defaultFromId = activeBranch?.id || branches[0]?.id || 'branch-1';
@@ -175,7 +250,7 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -209,44 +284,103 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
 
     const fromBranch = branches.find(b => b.id === fromBranchId);
     const toBranch = branches.find(b => b.id === toBranchId);
-
     const totalQuantity = items.reduce((acc, curr) => acc + Number(curr.quantity || 0), 0);
 
-    if (editingTransfer) {
-      const res = updateTransfer(editingTransfer.id, {
-        date: transferDate,
-        driverOrCarrier: carrier,
-        vehicleNumber,
-        remarks,
-        status,
-        items,
-        totalQuantity,
-        totalItems: items.length
-      });
+    setIsSubmittingTransfer(true);
+    try {
+      let token = sheetConfig.accessToken || getStoredAccessToken();
+      const sheetId = sheetConfig.spreadsheetId || localStorage.getItem('floweasy_saved_sheet_id_v2') || '';
 
-      if (!res.success) {
-        setFormError(res.error || 'Failed to update transfer.');
+      // If connected but no token yet, attempt token request directly on this user click
+      if (sheetId && !token && !localStorage.getItem('floweasy_apps_script_url')) {
+        try {
+          token = await requestGoogleAccessToken(true);
+          if (token) {
+            setSheetConfig(prev => ({
+              ...prev,
+              accessToken: token,
+              isConnected: true
+            }));
+          }
+        } catch (authErr) {
+          console.warn('Google Sheets token request during save skipped or declined:', authErr);
+        }
+      }
+
+      if (editingTransfer) {
+        const res = updateTransfer(editingTransfer.id, {
+          date: transferDate,
+          driverOrCarrier: carrier,
+          vehicleNumber,
+          remarks,
+          status,
+          items,
+          totalQuantity,
+          totalItems: items.length
+        });
+
+        if (!res.success) {
+          setFormError(res.error || 'Failed to update transfer.');
+          setIsSubmittingTransfer(false);
+          return;
+        }
+
+        // Save alterations directly to both sheets
+        if (sheetId) {
+          const updatedTransferObj = {
+            ...editingTransfer,
+            date: transferDate,
+            driverOrCarrier: carrier,
+            vehicleNumber,
+            remarks,
+            status,
+            items,
+            totalQuantity,
+            totalItems: items.length
+          };
+          saveTransferToGoogleSheets(sheetId, updatedTransferObj, token).catch(err => {
+            console.warn('Sheet update error:', err);
+          });
+        }
+      } else {
+        const newTransfer = createTransfer(
+          {
+            date: transferDate,
+            fromBranchId,
+            fromBranchName: fromBranch?.name || 'Unknown Branch',
+            toBranchId,
+            toBranchName: toBranch?.name || 'Unknown Branch',
+            items,
+            totalItems: items.length,
+            totalQuantity,
+            driverOrCarrier: carrier,
+            vehicleNumber,
+            remarks,
+            status
+          },
+          token
+        );
+
+        setIsModalOpen(false);
+        if (onCloseCreate) onCloseCreate();
+        if (newTransfer) {
+          setViewChallan(newTransfer);
+          if (token || localStorage.getItem('floweasy_apps_script_url')) {
+            setRefreshNotice(`Challan #${newTransfer.challanNo} created and saving to Google Sheet tabs "buro" and "club"!`);
+          } else {
+            setRefreshNotice(`Challan #${newTransfer.challanNo} saved in app! Note: Google write authorization pending. Click "Sync" to push to tabs "buro" & "club".`);
+          }
+        }
         return;
       }
-    } else {
-      createTransfer({
-        date: transferDate,
-        fromBranchId,
-        fromBranchName: fromBranch?.name || 'Unknown Branch',
-        toBranchId,
-        toBranchName: toBranch?.name || 'Unknown Branch',
-        items,
-        totalItems: items.length,
-        totalQuantity,
-        driverOrCarrier: carrier,
-        vehicleNumber,
-        remarks,
-        status
-      });
-    }
 
-    setIsModalOpen(false);
-    if (onCloseCreate) onCloseCreate();
+      setIsModalOpen(false);
+      if (onCloseCreate) onCloseCreate();
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to save transfer.');
+    } finally {
+      setIsSubmittingTransfer(false);
+    }
   };
 
   const handleDeleteTransfer = (transfer: StockTransfer) => {
@@ -277,15 +411,45 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
           </p>
         </div>
 
-        <button
-          id="new-transfer-modal-btn"
-          onClick={handleOpenCreateModal}
-          className="flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-blue-900 text-white hover:bg-blue-800 transition-colors shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Transfer Challan</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            id="refresh-sheet-transfers-btn"
+            type="button"
+            onClick={handleRefreshFromSheet}
+            disabled={isRefreshingSheet}
+            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50 transition-colors shadow-2xs"
+            title="Fetch and display all transfers directly from connected Google Sheet"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${isRefreshingSheet ? 'animate-spin text-emerald-600' : 'text-emerald-700'}`} />
+            <span>{isRefreshingSheet ? 'Fetching...' : 'Fetch from Sheet'}</span>
+          </button>
+
+          <button
+            id="new-transfer-modal-btn"
+            onClick={handleOpenCreateModal}
+            className="flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-blue-900 text-white hover:bg-blue-800 transition-colors shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Transfer Challan</span>
+          </button>
+        </div>
       </div>
+
+      {refreshNotice && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center justify-between shadow-2xs">
+          <div className="flex items-center space-x-2">
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>{refreshNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRefreshNotice(null)}
+            className="text-emerald-700 hover:text-emerald-900 font-bold ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Security Banner: Explicit creator rule explanation */}
       <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
@@ -294,6 +458,45 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
           <strong>Creator Email Authorization Policy:</strong> Under system security rules, only the original creator of a transfer challan (or Administrator) is permitted to <em>Alter</em> or <em>Delete</em> it. Authorized staff users can create entries and view reports without having raw access to the Google Sheet.
         </div>
       </div>
+
+      {/* Unsynced Transfers Alert Banner */}
+      {unsyncedTransfers.length > 0 && (
+        <div className="p-4 bg-amber-50/95 border border-amber-300 rounded-xl text-xs text-amber-950 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold text-amber-950 text-sm">
+                {unsyncedTransfers.length} Transfer{unsyncedTransfers.length > 1 ? 's' : ''} Pending Google Sheet Sync
+                {unsyncedTransfers.some(t => t.challanNo === '1042') ? ' (including Challan #1042)' : ''}
+              </div>
+              <div className="text-amber-800 mt-0.5 text-xs">
+                These entries are safely saved in Easy Flow ERP, but require Google write authorization (OAuth) to append rows to your Google Sheet tabs <strong>"buro"</strong> and <strong>"club"</strong>.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              id="sync-all-pending-btn"
+              onClick={handleSyncAllPending}
+              disabled={isSyncingAllPending}
+              className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all disabled:opacity-50"
+            >
+              {isSyncingAllPending ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Authorizing & Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Authorize & Sync to Sheets Now</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filter and Search controls */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -357,13 +560,14 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
                 <th className="py-3 px-4 text-right">Total Units</th>
                 <th className="py-3 px-4">Created By (Email)</th>
                 <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-center">Google Sheets</th>
                 <th className="py-3 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredTransfers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-slate-400">
+                  <td colSpan={10} className="py-8 text-center text-slate-400">
                     No stock transfers recorded matching this criteria.
                   </td>
                 </tr>
@@ -410,6 +614,30 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
                         >
                           {t.status}
                         </span>
+                      </td>
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        {isTransferSyncedToSheet(t.id) ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span>buro & club</span>
+                          </span>
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+                              Pending
+                            </span>
+                            <button
+                              type="button"
+                              id={`sync-transfer-${t.id}`}
+                              onClick={() => handleSyncSingleTransfer(t)}
+                              disabled={syncingTransferId === t.id}
+                              title="Authorize & save transfer into Google Sheet tabs 'buro' and 'club'"
+                              className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-bold rounded cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
+                            >
+                              {syncingTransferId === t.id ? 'Syncing...' : 'Sync Now'}
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center space-x-1">
@@ -483,8 +711,22 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
         </div>
       </div>
 
-      {/* Modal: Create or Edit Stock Transfer Challan */}
-      {isModalOpen && (
+      {/* New Transfer Modal */}
+      <NewTransferModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          if (onCloseCreate) onCloseCreate();
+        }}
+        onSuccess={(created) => {
+          setIsModalOpen(false);
+          if (onCloseCreate) onCloseCreate();
+          setViewChallan(created);
+        }}
+      />
+
+      {/* Legacy Modal (Disabled) */}
+      {false && isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl overflow-hidden border border-slate-200">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -736,9 +978,17 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
                 <button
                   id="submit-transfer-form-btn"
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold bg-blue-900 text-white hover:bg-blue-800 rounded-lg shadow-xs"
+                  disabled={isSubmittingTransfer}
+                  className="px-5 py-2 text-xs font-semibold bg-blue-900 text-white hover:bg-blue-800 disabled:opacity-50 rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
-                  {editingTransfer ? 'Save Alterations' : 'Generate & Issue Challan'}
+                  {isSubmittingTransfer ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving to Sheets...</span>
+                    </>
+                  ) : (
+                    editingTransfer ? 'Save Alterations' : 'Generate & Issue Challan'
+                  )}
                 </button>
               </div>
             </form>
@@ -746,8 +996,16 @@ export const StockTransfersView: React.FC<StockTransfersViewProps> = ({
         </div>
       )}
 
-      {/* Modal: View & Print Challan Preview */}
-      {viewChallan && (
+      {/* Inter Stock Transfer Previews Dialog */}
+      <ChallanPreviewModal
+        isOpen={!!viewChallan}
+        transfer={viewChallan}
+        onClose={() => setViewChallan(null)}
+        onDeleteSuccess={() => setViewChallan(null)}
+      />
+
+      {/* Legacy Modal: View & Print Challan Preview (Disabled) */}
+      {false && viewChallan && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden border border-slate-200 my-6">
             {/* Top Toolbar */}

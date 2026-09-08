@@ -17,10 +17,15 @@ import {
   Copy,
   HelpCircle,
   Info,
-  ShieldAlert
+  ShieldAlert,
+  Edit3,
+  Check,
+  X,
+  Zap,
+  Code
 } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext';
-import { AuthorizedUser, Branch } from '../types';
+import { AuthorizedUser, Branch, UserRole } from '../types';
 import {
   getOAuthClientId,
   setOAuthClientId,
@@ -35,13 +40,16 @@ export const SettingsView: React.FC = () => {
     setBranches,
     authorizedUsers,
     addAuthorizedUser,
+    updateAuthorizedUser,
     removeAuthorizedUser,
+    loadAuthorizedUsersFromGoogleSheet,
     sheetConfig,
     connectGoogleSheet,
     syncWithGoogleSheet,
     fetchStockMasterFromCloud,
     createNewCloudSpreadsheet,
-    currentUser
+    currentUser,
+    isAdmin
   } = useInventory();
 
   const [activeTab, setActiveTab] = useState<'sheet' | 'users' | 'company' | 'branches'>('sheet');
@@ -58,8 +66,15 @@ export const SettingsView: React.FC = () => {
   // New User Form State
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserName, setNewUserName] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'admin' | 'storekeeper' | 'sales'>('storekeeper');
+  const [newUserRole, setNewUserRole] = useState<UserRole>('creator');
   const [newUserBranch, setNewUserBranch] = useState(branches[0]?.id || 'branch-1');
+
+  // Edit User State
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserBranch, setEditUserBranch] = useState('');
+  const [editUserRole, setEditUserRole] = useState<UserRole>('creator');
+  const [isSyncingUsers, setIsSyncingUsers] = useState(false);
 
   // Company Form State
   const [companyForm, setCompanyForm] = useState({ ...company });
@@ -164,19 +179,67 @@ export const SettingsView: React.FC = () => {
       return;
     }
 
+    const cleanEmail = newUserEmail.trim().toLowerCase();
     const branch = branches.find(b => b.id === newUserBranch);
+    const assignedRole: UserRole = cleanEmail === 'hr.rftcom@gmail.com' ? 'admin' : (newUserRole === 'admin' ? 'creator' : newUserRole);
+
     addAuthorizedUser({
-      email: newUserEmail.trim(),
+      email: cleanEmail,
       name: newUserName.trim(),
-      role: newUserRole,
+      role: assignedRole,
       assignedBranchId: newUserBranch,
-      assignedBranchName: branch?.name || 'All Branches'
+      assignedBranchName: branch?.name || 'All Branches',
+      status: 'active'
     });
 
     setNewUserEmail('');
     setNewUserName('');
-    setStatusMessage(`User "${newUserName}" (${newUserEmail}) authorized.`);
+    setStatusMessage(`User "${newUserName}" (${cleanEmail}) authorized and synced.`);
     setTimeout(() => setStatusMessage(null), 4000);
+  };
+
+  const handleStartEditUser = (user: AuthorizedUser) => {
+    setEditingUserId(user.id);
+    setEditUserName(user.name);
+    setEditUserBranch(user.assignedBranchId || branches[0]?.id || '');
+    setEditUserRole(user.role);
+  };
+
+  const handleSaveEditUser = (userId: string) => {
+    const targetUser = authorizedUsers.find(u => u.id === userId);
+    if (!targetUser) return;
+
+    const branch = branches.find(b => b.id === editUserBranch);
+    const isSoleAdmin = targetUser.email.toLowerCase() === 'hr.rftcom@gmail.com';
+    const cleanRole: UserRole = isSoleAdmin ? 'admin' : (editUserRole === 'admin' ? 'creator' : editUserRole);
+
+    updateAuthorizedUser(userId, {
+      name: editUserName.trim() || targetUser.name,
+      assignedBranchId: editUserBranch,
+      assignedBranchName: branch?.name || targetUser.assignedBranchName,
+      role: cleanRole
+    });
+
+    setEditingUserId(null);
+    setStatusMessage(`Updated profile for ${targetUser.email}.`);
+    setTimeout(() => setStatusMessage(null), 4000);
+  };
+
+  const handleSyncUsersFromSheet = async () => {
+    setIsSyncingUsers(true);
+    setStatusMessage(null);
+    try {
+      const res = await loadAuthorizedUsersFromGoogleSheet();
+      if (res.success) {
+        setStatusMessage(`Successfully loaded ${res.count} authorized users from sheet tab "address" (Column A).`);
+      } else {
+        alert(res.error || 'Failed to sync users from sheet.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error syncing users from sheet.');
+    } finally {
+      setIsSyncingUsers(false);
+    }
   };
 
   // Company Settings Update
@@ -535,92 +598,123 @@ export const SettingsView: React.FC = () => {
       {activeTab === 'users' && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-            <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-900 flex items-center justify-center font-bold">
-                <ShieldCheck className="w-5 h-5" />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-100 gap-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-900 flex items-center justify-center font-bold">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                      Authorized User Email Access Control
+                    </h2>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                      Auto-synced with Sheet "address" (Col A)
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Administrator authority is restricted exclusively to <span className="font-mono font-bold text-blue-900">hr.rftcom@gmail.com</span>. Authorized staff emails are loaded automatically from the Google Sheet tab named &quot;address&quot;.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                  Authorized User Email Access Control
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Strictly authorize user emails who can access this webapp and make entries. Only creator can alter/delete entries.
-                </p>
-              </div>
+
+              <button
+                type="button"
+                onClick={handleSyncUsersFromSheet}
+                disabled={isSyncingUsers}
+                className="inline-flex items-center justify-center px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 border border-slate-300 shadow-2xs"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isSyncingUsers ? 'animate-spin' : ''}`} />
+                {isSyncingUsers ? 'Syncing...' : 'Sync "address" Sheet'}
+              </button>
             </div>
 
-            {/* Add User Form */}
-            <form onSubmit={handleAddUser} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-              <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Authorize New Staff User Email
+            {!isAdmin && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2.5 text-xs text-amber-900">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  Admin rights are restricted to <strong>hr.rftcom@gmail.com</strong>. Only the admin can add, edit, or remove authorized users.
+                </span>
               </div>
+            )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">User Email *</label>
-                  <input
-                    id="new-user-email-input"
-                    type="email"
-                    required
-                    value={newUserEmail}
-                    onChange={e => setNewUserEmail(e.target.value)}
-                    placeholder="user@rftglobal.com"
-                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
-                  />
+            {/* Add User Form - only available for admin */}
+            {isAdmin && (
+              <form onSubmit={handleAddUser} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Authorize New Staff User Email
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Full Name *</label>
-                  <input
-                    id="new-user-name-input"
-                    type="text"
-                    required
-                    value={newUserName}
-                    onChange={e => setNewUserName(e.target.value)}
-                    placeholder="e.g. John Kasongo"
-                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">User Email *</label>
+                    <input
+                      id="new-user-email-input"
+                      type="email"
+                      required
+                      value={newUserEmail}
+                      onChange={e => setNewUserEmail(e.target.value)}
+                      placeholder="user@rftglobal.com"
+                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Full Name *</label>
+                    <input
+                      id="new-user-name-input"
+                      type="text"
+                      required
+                      value={newUserName}
+                      onChange={e => setNewUserName(e.target.value)}
+                      placeholder="e.g. John Kasongo"
+                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">System Role</label>
+                    <select
+                      value={newUserRole}
+                      onChange={e => setNewUserRole(e.target.value as any)}
+                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
+                    >
+                      <option value="creator">Creator (Make & Alter Own Entries)</option>
+                      <option value="storekeeper">Storekeeper</option>
+                      <option value="sales">Sales Officer</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Assigned Branch</label>
+                    <select
+                      value={newUserBranch}
+                      onChange={e => setNewUserBranch(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
+                    >
+                      {branches.map(b => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">System Role</label>
-                  <select
-                    value={newUserRole}
-                    onChange={e => setNewUserRole(e.target.value as any)}
-                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                <div className="flex justify-between items-center pt-1">
+                  <span className="text-[11px] text-slate-500">
+                    Will be added locally and appended to the Google Sheet tab &quot;address&quot; in Column A.
+                  </span>
+                  <button
+                    id="add-authorized-user-btn"
+                    type="submit"
+                    className="px-4 py-2 bg-blue-900 text-white rounded-lg text-xs font-semibold hover:bg-blue-800 transition-colors shadow-xs"
                   >
-                    <option value="storekeeper">Storekeeper</option>
-                    <option value="sales">Sales Officer</option>
-                    <option value="admin">Administrator</option>
-                  </select>
+                    Authorize Email Access
+                  </button>
                 </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Assigned Branch</label>
-                  <select
-                    value={newUserBranch}
-                    onChange={e => setNewUserBranch(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
-                  >
-                    {branches.map(b => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-1">
-                <button
-                  id="add-authorized-user-btn"
-                  type="submit"
-                  className="px-4 py-2 bg-blue-900 text-white rounded-lg text-xs font-semibold hover:bg-blue-800 transition-colors shadow-xs"
-                >
-                  Authorize Email Access
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
 
             {/* List of Authorized Users */}
             <div className="border border-slate-200 rounded-xl overflow-hidden">
@@ -631,51 +725,155 @@ export const SettingsView: React.FC = () => {
                     <th className="py-2.5 px-4">Name</th>
                     <th className="py-2.5 px-4">Role</th>
                     <th className="py-2.5 px-4">Assigned Branch</th>
-                    <th className="py-2.5 px-4 text-center">Creator Alter Rights</th>
+                    <th className="py-2.5 px-4 text-center">Alter Rights</th>
                     <th className="py-2.5 px-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {authorizedUsers.map(user => {
                     const isSelf = user.email.toLowerCase() === currentUser.email.toLowerCase();
+                    const isProtectedAdmin = user.email.toLowerCase() === 'hr.rftcom@gmail.com';
+                    const isEditing = editingUserId === user.id;
 
                     return (
-                      <tr key={user.email} className="hover:bg-slate-50">
+                      <tr key={user.id || user.email} className="hover:bg-slate-50">
                         <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                          {user.email}
-                          {isSelf && (
-                            <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-blue-100 text-blue-800 font-sans">
-                              Current Session
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{user.email}</span>
+                            {isProtectedAdmin && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-900 border border-purple-200 font-sans font-semibold">
+                                Sole Admin
+                              </span>
+                            )}
+                            {isSelf && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-100 text-blue-800 font-sans font-semibold">
+                                You
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-4 font-medium text-slate-800">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editUserName}
+                              onChange={e => setEditUserName(e.target.value)}
+                              className="px-2 py-1 text-xs border border-slate-300 rounded w-full max-w-[140px]"
+                            />
+                          ) : (
+                            user.name
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          {isEditing ? (
+                            <select
+                              value={editUserRole}
+                              disabled={isProtectedAdmin}
+                              onChange={e => setEditUserRole(e.target.value as any)}
+                              className="px-2 py-1 text-xs border border-slate-300 rounded bg-white"
+                            >
+                              {isProtectedAdmin ? (
+                                <option value="admin">Administrator</option>
+                              ) : (
+                                <>
+                                  <option value="creator">Creator</option>
+                                  <option value="storekeeper">Storekeeper</option>
+                                  <option value="sales">Sales</option>
+                                </>
+                              )}
+                            </select>
+                          ) : (
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                user.role === 'admin'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : user.role === 'sales'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {user.role}
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 font-medium text-slate-800">{user.name}</td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                              user.role === 'admin'
-                                ? 'bg-purple-100 text-purple-800'
-                                : user.role === 'sales'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-blue-100 text-blue-800'
-                            }`}
-                          >
-                            {user.role}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-600">{user.assignedBranchName}</td>
-                        <td className="py-3 px-4 text-center text-slate-700 font-medium">
-                          Can alter & delete entries created by {user.email}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          {!isSelf && user.role !== 'admin' && (
-                            <button
-                              onClick={() => removeAuthorizedUser(user.email)}
-                              className="text-slate-400 hover:text-rose-600 p-1"
-                              title="Revoke access"
+
+                        <td className="py-3 px-4 text-slate-600">
+                          {isEditing ? (
+                            <select
+                              value={editUserBranch}
+                              onChange={e => setEditUserBranch(e.target.value)}
+                              className="px-2 py-1 text-xs border border-slate-300 rounded bg-white"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                              {branches.map(b => (
+                                <option key={b.id} value={b.id}>
+                                  {b.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            user.assignedBranchName || 'All Branches'
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4 text-center text-slate-700 font-medium">
+                          {isProtectedAdmin ? (
+                            <span className="text-purple-700 font-bold">Can alter & delete ALL entries</span>
+                          ) : (
+                            <span>Can alter & delete own entries</span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4 text-center">
+                          {isAdmin && (
+                            <div className="flex items-center justify-center gap-1.5">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveEditUser(user.id)}
+                                    className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+                                    title="Save changes"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingUserId(null)}
+                                    className="p-1 text-slate-400 hover:bg-slate-100 rounded"
+                                    title="Cancel"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditUser(user)}
+                                    className="p-1 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded"
+                                    title="Edit user"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  {!isProtectedAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (confirm(`Revoke access for ${user.email}?`)) {
+                                          removeAuthorizedUser(user.id || user.email);
+                                        }
+                                      }}
+                                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"
+                                      title="Revoke access"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           )}
                         </td>
                       </tr>

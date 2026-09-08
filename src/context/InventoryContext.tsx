@@ -7,7 +7,8 @@ import {
   Invoice,
   StockItem,
   StockTransfer,
-  UserRole
+  UserRole,
+  MasterStockItem
 } from '../types';
 import {
   INITIAL_AUTHORIZED_USERS,
@@ -15,18 +16,29 @@ import {
   INITIAL_COMPANY,
   INITIAL_INVOICES,
   INITIAL_STOCK_ITEMS,
-  INITIAL_STOCK_TRANSFERS
+  INITIAL_STOCK_TRANSFERS,
+  INITIAL_MASTER_ITEMS
 } from '../data/mockData';
 import {
   createGoogleSpreadsheet,
   fetchBranchesFromSheet,
   fetchStockMasterFromSheet,
+  fetchAuthorizedUsersFromSheet,
+  appendAuthorizedUserToSheet,
+  appendTransferToBuroSheet,
+  appendTransferToClubSheet,
+  saveTransferToGoogleSheets,
+  deleteTransferFromGoogleSheet,
+  fetchTransfersFromGoogleSheet,
   requestGoogleAccessToken,
-  syncAllToGoogleSheet
+  syncAllToGoogleSheet,
+  fetchMasterDataFromSheet,
+  getStoredAccessToken
 } from '../services/googleSheets';
 
 interface InventoryContextType {
   currentUser: AuthorizedUser;
+  isAdmin: boolean;
   authorizedUsers: AuthorizedUser[];
   branches: Branch[];
   setBranches: React.Dispatch<React.SetStateAction<Branch[]>>;
@@ -42,7 +54,10 @@ interface InventoryContextType {
   confirmBranchSelection: (branchId: string) => void;
   resetBranchSelection: () => void;
   activeBranch: Branch | null;
+  masterItems: MasterStockItem[];
+  loadMasterDataFromGoogleSheet: (sheetIdOrUrl?: string) => Promise<{ success: boolean; count: number; error?: string }>;
   loadBranchesFromGoogleSheet: (sheetIdOrUrl?: string) => Promise<{ success: boolean; count: number; error?: string }>;
+  loadAuthorizedUsersFromGoogleSheet: (sheetIdOrUrl?: string) => Promise<{ success: boolean; count: number; users: string[]; error?: string }>;
   // Auth & Session
   isAuthenticated: boolean;
   loginWithEmail: (email: string) => { success: boolean; message?: string };
@@ -57,7 +72,7 @@ interface InventoryContextType {
   canAlterTransfer: (transfer: StockTransfer) => boolean;
   canDeleteTransfer: (transfer: StockTransfer) => boolean;
   // Transfer operations
-  createTransfer: (data: Omit<StockTransfer, 'id' | 'challanNo' | 'createdByEmail' | 'createdByName' | 'createdAt'>) => StockTransfer;
+  createTransfer: (data: Omit<StockTransfer, 'id' | 'createdByEmail' | 'createdByName' | 'createdAt'> & { challanNo?: string }, tokenOverride?: string) => StockTransfer;
   updateTransfer: (id: string, data: Partial<StockTransfer>) => { success: boolean; error?: string };
   deleteTransfer: (id: string) => { success: boolean; error?: string };
   // Invoicing operations
@@ -78,6 +93,13 @@ interface InventoryContextType {
   createAndConnectNewSheet: () => Promise<string>;
   syncWithGoogleSheet: () => Promise<void>;
   fetchStockMasterFromCloud: () => Promise<void>;
+  // Sheet Syncing (buro & club)
+  syncedTransferIds: string[];
+  isTransferSyncedToSheet: (transferId: string) => boolean;
+  syncTransferToSheets: (transfer: StockTransfer, tokenOverride?: string) => Promise<{ success: boolean; unauthorized?: boolean; error?: string }>;
+  syncTransferToBuro: (transfer: StockTransfer, tokenOverride?: string) => Promise<{ success: boolean; unauthorized?: boolean; error?: string }>;
+  syncTransfersFromSheet: (sheetIdOrUrl?: string) => Promise<{ success: boolean; count: number; error?: string }>;
+  authorizeGoogleAndSyncAll: () => Promise<{ success: boolean; syncedCount: number; error?: string }>;
 }
 
 const InventoryContext = createContext<InventoryContextType | null>(null);
@@ -92,15 +114,49 @@ const STORAGE_KEYS = {
   sheetConfig: 'rft_inventory_sheet_v2',
   currentUserEmail: 'rft_inventory_cur_email_v2',
   authStatus: 'rft_inventory_auth_status_v2',
-  selectedBranch: 'floweasy_selected_branch_v5',
-  branchConfirmed: 'floweasy_branch_confirmed_v5'
-};
+    selectedBranch: 'floweasy_selected_branch_v5',
+    branchConfirmed: 'floweasy_branch_confirmed_v5',
+    sheetId: 'floweasy_saved_sheet_id_v2',
+    masterItems: 'floweasy_master_items_v1',
+    syncedTransfers: 'floweasy_synced_transfers_v1'
+  };
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Track transfers synced to Google Sheet tab "buro"
+  const [syncedTransferIds, setSyncedTransferIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('floweasy_synced_transfers_v1');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   // Load initial states from LocalStorage or fall back to defaults
   const [authorizedUsers, setAuthorizedUsers] = useState<AuthorizedUser[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.users);
-    return saved ? JSON.parse(saved) : INITIAL_AUTHORIZED_USERS;
+    let list: AuthorizedUser[] = saved ? JSON.parse(saved) : INITIAL_AUTHORIZED_USERS;
+
+    // Enforce that only hr.rftcom@gmail.com can ever have admin role
+    list = list.map(u => ({
+      ...u,
+      role: u.email.toLowerCase() === 'hr.rftcom@gmail.com' ? 'admin' : (u.role === 'admin' ? 'creator' : u.role)
+    }));
+
+    // Ensure hr.rftcom@gmail.com is always present
+    if (!list.some(u => u.email.toLowerCase() === 'hr.rftcom@gmail.com')) {
+      list.unshift({
+        id: 'user-admin',
+        email: 'hr.rftcom@gmail.com',
+        name: 'Easy Flow Administrator',
+        role: 'admin',
+        assignedBranchId: 'branch-kin',
+        status: 'active',
+        addedAt: new Date().toISOString()
+      });
+    }
+
+    return list;
   });
 
   const [currentUserEmail, setCurrentUserEmail] = useState<string>(() => {
@@ -143,9 +199,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (!parsed.companyName || parsed.companyName.includes('RFT')) {
-          parsed.companyName = 'Flow Easy';
-        }
+        parsed.companyName = 'Easy Flow';
+        parsed.taxNumber = 'CD-KIN-TVA-00984218-A';
+        parsed.taxId = 'CD-KIN-TVA-00984218-A';
+        parsed.rccm = 'CD/KIN/RCCM/20-B-08412';
+        parsed.nationalId = '01-83-N45209P';
+        parsed.email = 'contact@rftcom-trading.com';
+        parsed.phone = '+243 81 000 9876 / +243 99 555 4321';
         return parsed;
       } catch {
         return INITIAL_COMPANY;
@@ -161,7 +221,17 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const [transfers, setTransfers] = useState<StockTransfer[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.transfers);
-    return saved ? JSON.parse(saved) : INITIAL_STOCK_TRANSFERS;
+    if (saved) {
+      try {
+        const parsed: StockTransfer[] = JSON.parse(saved);
+        return parsed.filter(
+          t => !t.id?.startsWith('trf-001') && !t.id?.startsWith('trf-002') && !t.id?.startsWith('trf-003')
+        );
+      } catch {
+        return [];
+      }
+    }
+    return [];
   });
 
   const [invoices, setInvoices] = useState<Invoice[]>(() => {
@@ -172,6 +242,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.selectedBranch);
     return saved || 'branch-kin';
+  });
+
+  const [masterItems, setMasterItems] = useState<MasterStockItem[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.masterItems);
+    return saved ? JSON.parse(saved) : INITIAL_MASTER_ITEMS;
   });
 
   const [isBranchConfirmed, setIsBranchConfirmed] = useState<boolean>(() => {
@@ -187,6 +262,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const resetBranchSelection = () => {
+    // Only the administrator (hr.rftcom@gmail.com) is permitted to switch branches
+    if (currentUserEmail.toLowerCase().trim() !== 'hr.rftcom@gmail.com') {
+      return;
+    }
     setIsBranchConfirmed(false);
     localStorage.setItem(STORAGE_KEYS.branchConfirmed, 'false');
   };
@@ -208,43 +287,39 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const rows: Branch[] = [];
       lines.forEach((line, idx) => {
         const parts = line.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-        const email = parts[0] || '';
-        const invPrefix = parts[1] || '';
-        const locationName = parts[2] || '';
-        const address = parts[3] || '';
-        const rccm = parts[4] || '';
-        const impot = parts[5] || '';
-        const idNat = parts[6] || '';
+        // Column B (parts[1]) is strictly Location Name; Column A (parts[0]) is prefix/code/city
+        const colA = parts[0] || '';
+        const locationName = parts[1] || parts[2] || '';
 
-        // Skip header
+        // Ignore empty location names
+        if (!locationName) return;
+
+        // Skip header row
         if (
-          email.toLowerCase().includes('email') ||
-          invPrefix.toLowerCase().includes('prefix') ||
           locationName.toLowerCase().includes('location') ||
-          rccm.toLowerCase() === 'rccm'
+          locationName.toLowerCase().includes('branch name') ||
+          (idx === 0 && colA.toLowerCase().includes('kinshasa'))
         ) {
           return;
         }
 
-        if (!locationName && !email && !invPrefix) return;
-
-        const safeName = locationName || (email ? email.split('@')[0] : `Branch ${idx + 1}`);
-        const safeCode = invPrefix || safeName.toUpperCase().slice(0, 4);
-        const safeId = `branch-${safeName.toLowerCase().replace(/[^a-z0-9]/g, '-') || idx + 1}`;
+        const safeName = locationName;
+        const safeCode = colA || safeName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+        const safeId = `branch-${safeName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
 
         rows.push({
           id: safeId,
           name: safeName,
           code: safeCode,
-          invPrefix: invPrefix || safeCode,
-          address: address || '',
-          city: locationName || '',
+          invPrefix: safeCode,
+          address: 'Commercial Avenue',
+          city: 'Gombe',
           phone: '',
-          email: email || '',
-          rccm: rccm || '',
-          impot: impot || '',
-          idNat: idNat || '',
-          isHeadquarters: idx === 0
+          email: safeName === 'A1-SHOP NO1' ? 'itkinshasa1@gmail.com' : (colA.includes('@') ? colA : ''),
+          rccm: '123test',
+          impot: '123test',
+          idNat: '123test',
+          isHeadquarters: safeName === 'A1-SHOP NO1' || idx === 0
         });
       });
 
@@ -268,7 +343,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (!fetched.some(b => b.id === selectedBranchId)) {
           setSelectedBranchId(fetched[0].id);
         }
-        // Save sheet config
+        // Save sheet config and remembered ID
         setSheetConfig(prev => ({
           ...prev,
           spreadsheetId: cleanId,
@@ -276,6 +351,38 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           isConnected: true,
           lastSyncTime: new Date().toLocaleTimeString()
         }));
+        localStorage.setItem(STORAGE_KEYS.sheetId, cleanId);
+
+        // Auto-authorize any branch email found (e.g. itkinshasa1@gmail.com)
+        fetched.forEach(b => {
+          if (b.email && b.email.includes('@')) {
+            const clean = b.email.toLowerCase().trim();
+            setAuthorizedUsers(prev => {
+              if (!prev.some(u => u.email.toLowerCase() === clean)) {
+                const isTargetAdmin = clean === 'hr.rftcom@gmail.com';
+                const nextList = [
+                  ...prev,
+                  {
+                    id: `usr-${clean.replace(/[^a-z0-9]/g, '-')}`,
+                    email: clean,
+                    name: isTargetAdmin ? 'Easy Flow Administrator' : (b.name || clean.split('@')[0]),
+                    role: isTargetAdmin ? 'admin' : 'creator' as UserRole,
+                    assignedBranchId: b.id,
+                    status: 'active' as const,
+                    addedAt: new Date().toISOString()
+                  }
+                ];
+                localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(nextList));
+                return nextList;
+              }
+              return prev;
+            });
+          }
+        });
+
+        // Also auto-fetch authorized users from tab "address" Column A
+        loadAuthorizedUsersFromGoogleSheet(cleanId).catch(() => {});
+
         return { success: true, count: fetched.length };
       } else {
         return { success: false, count: 0, error: 'No non-empty branch records found in "branch name" tab' };
@@ -287,32 +394,195 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const [sheetConfig, setSheetConfig] = useState<GoogleSheetConfig>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.sheetConfig);
-    return saved
-      ? JSON.parse(saved)
-      : {
-          spreadsheetId: '',
-          spreadsheetUrl: '',
-          isConnected: false,
-          lastSyncTime: null,
-          syncStatus: 'idle',
-          syncError: null,
-          autoSync: true,
-          accessToken: null
-        };
+    const parsed = saved ? JSON.parse(saved) : null;
+    const cachedToken = getStoredAccessToken();
+    const savedSheetId = localStorage.getItem(STORAGE_KEYS.sheetId) || '';
+
+    return {
+      spreadsheetId: parsed?.spreadsheetId || savedSheetId,
+      spreadsheetUrl: parsed?.spreadsheetUrl || (savedSheetId ? `https://docs.google.com/spreadsheets/d/${savedSheetId}/edit` : ''),
+      isConnected: Boolean(parsed?.isConnected || savedSheetId),
+      lastSyncTime: parsed?.lastSyncTime || null,
+      syncStatus: parsed?.syncStatus || 'idle',
+      syncError: null,
+      autoSync: true,
+      accessToken: parsed?.accessToken || cachedToken || null
+    };
   });
 
-  // Current user derived from email
-  const currentUser: AuthorizedUser = authorizedUsers.find(
-    u => u.email.toLowerCase() === currentUserEmail.toLowerCase() && u.status === 'active'
-  ) || {
-    id: 'user-admin',
-    email: currentUserEmail,
-    name: currentUserEmail.split('@')[0] || 'Authorized User',
-    role: currentUserEmail.toLowerCase() === 'hr.rftcom@gmail.com' ? 'admin' : 'staff',
-    assignedBranchId: 'branch-1',
-    status: 'active',
-    addedAt: new Date().toISOString()
+  // Current user derived from email: strictly enforce hr.rftcom@gmail.com as sole admin
+  const isAdmin = currentUserEmail.toLowerCase().trim() === 'hr.rftcom@gmail.com';
+
+  const currentUser: AuthorizedUser = (() => {
+    const clean = currentUserEmail.toLowerCase().trim();
+    const isUserAdmin = clean === 'hr.rftcom@gmail.com';
+    let branchForUser = branches.find(
+      b => b.email && b.email.trim().toLowerCase() === clean
+    );
+    // User Requirement: if user login as itkinshasa1@gmail.com, predefined location is "A1-SHOP NO1"
+    if (clean === 'itkinshasa1@gmail.com') {
+      const a1Branch = branches.find(b => b.name === 'A1-SHOP NO1');
+      if (a1Branch) branchForUser = a1Branch;
+    }
+
+    const defaultBranch = branches.find(b => b.name === 'A1-SHOP NO1') || branches[0];
+    const userBranchName = clean === 'itkinshasa1@gmail.com'
+      ? 'A1-SHOP NO1'
+      : (branchForUser?.name || defaultBranch?.name || 'A1-SHOP NO1');
+    const userBranchId = branchForUser?.id || defaultBranch?.id || 'branch-a1';
+
+    const found = authorizedUsers.find(
+      u => u.email.toLowerCase() === clean && u.status === 'active'
+    );
+    if (found) {
+      return {
+        ...found,
+        assignedBranchId: userBranchId,
+        assignedBranchName: userBranchName,
+        // STRICT ENFORCEMENT: ONLY hr.rftcom@gmail.com can ever have 'admin' role
+        role: isUserAdmin ? 'admin' : (found.role === 'admin' ? 'creator' : found.role)
+      };
+    }
+    return {
+      id: isUserAdmin ? 'user-admin' : `usr-${Date.now()}`,
+      email: clean,
+      name: isUserAdmin ? 'Easy Flow Administrator' : (clean === 'itkinshasa1@gmail.com' ? 'A1 Operations' : (clean.split('@')[0] || 'Authorized User')),
+      role: isUserAdmin ? 'admin' : 'creator',
+      assignedBranchId: userBranchId,
+      assignedBranchName: userBranchName,
+      status: 'active',
+      addedAt: new Date().toISOString()
+    };
+  })();
+
+  // Load authorized users from Google Sheet tab "address" Column A
+  const loadAuthorizedUsersFromGoogleSheet = async (
+    sheetIdOrUrl?: string
+  ): Promise<{ success: boolean; count: number; users: string[]; error?: string }> => {
+    const rawInput = (
+      sheetIdOrUrl ||
+      sheetConfig.spreadsheetId ||
+      localStorage.getItem(STORAGE_KEYS.sheetId) ||
+      ''
+    ).trim();
+
+    if (!rawInput) {
+      return { success: false, count: 0, users: [], error: 'No Google Sheet link or ID provided.' };
+    }
+
+    const urlMatch = rawInput.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    const cleanId = urlMatch ? urlMatch[1] : rawInput;
+
+    try {
+      const emails = await fetchAuthorizedUsersFromSheet(cleanId, sheetConfig.accessToken);
+      if (emails && emails.length > 0) {
+        setAuthorizedUsers(prev => {
+          const map = new Map<string, AuthorizedUser>(prev.map(u => [u.email.toLowerCase(), u]));
+
+          emails.forEach(email => {
+            const clean = email.toLowerCase().trim();
+            if (!clean) return;
+            const isTargetAdmin = clean === 'hr.rftcom@gmail.com';
+            if (!map.has(clean)) {
+              map.set(clean, {
+                id: `usr-${clean.replace(/[^a-z0-9]/g, '-')}`,
+                email: clean,
+                name: isTargetAdmin ? 'Easy Flow Administrator' : clean.split('@')[0],
+                role: isTargetAdmin ? 'admin' : 'creator',
+                assignedBranchId: branches[0]?.id || 'branch-kin',
+                assignedBranchName: branches[0]?.name || 'KIn',
+                status: 'active',
+                addedAt: new Date().toISOString()
+              });
+            } else {
+              const existing = map.get(clean)!;
+              map.set(clean, {
+                ...existing,
+                status: 'active',
+                role: isTargetAdmin ? 'admin' : (existing.role === 'admin' ? 'creator' : existing.role)
+              });
+            }
+          });
+
+          // Always ensure hr.rftcom@gmail.com is present & admin
+          if (!map.has('hr.rftcom@gmail.com')) {
+            map.set('hr.rftcom@gmail.com', {
+              id: 'user-admin',
+              email: 'hr.rftcom@gmail.com',
+              name: 'Easy Flow Administrator',
+              role: 'admin',
+              assignedBranchId: branches[0]?.id || 'branch-kin',
+              status: 'active',
+              addedAt: new Date().toISOString()
+            });
+          }
+
+          const merged = Array.from(map.values());
+          localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(merged));
+          return merged;
+        });
+
+        localStorage.setItem(STORAGE_KEYS.sheetId, cleanId);
+        return { success: true, count: emails.length, users: emails };
+      }
+      return { success: false, count: 0, users: [], error: 'No emails found in sheet tab "address" Column A' };
+    } catch (err: any) {
+      console.warn('loadAuthorizedUsersFromGoogleSheet error:', err);
+      return { success: false, count: 0, users: [], error: err.message || 'Failed to fetch authorized users' };
+    }
   };
+
+  const loadMasterDataFromGoogleSheet = async (
+    sheetIdOrUrl?: string
+  ): Promise<{ success: boolean; count: number; error?: string }> => {
+    const rawInput = (
+      sheetIdOrUrl ||
+      sheetConfig.spreadsheetId ||
+      localStorage.getItem(STORAGE_KEYS.sheetId) ||
+      ''
+    ).trim();
+
+    if (!rawInput) {
+      return { success: false, count: 0, error: 'No Google Sheet configured' };
+    }
+
+    const urlMatch = rawInput.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    const cleanId = urlMatch ? urlMatch[1] : rawInput;
+
+    try {
+      const items = await fetchMasterDataFromSheet(cleanId, sheetConfig.accessToken);
+      if (items && items.length > 0) {
+        setMasterItems(items);
+        localStorage.setItem(STORAGE_KEYS.masterItems, JSON.stringify(items));
+        return { success: true, count: items.length };
+      }
+      return { success: false, count: 0, error: 'No items found in tab "masterdata"' };
+    } catch (err: any) {
+      console.warn('loadMasterDataFromGoogleSheet error:', err);
+      return { success: false, count: 0, error: err.message || 'Failed to fetch master data' };
+    }
+  };
+
+  // Auto-fetch from Google Sheet on startup ("and the data must fetch auto when someone use the app i do not want to fetch manully")
+  useEffect(() => {
+    const autoFetchSheet = async () => {
+      const target =
+        sheetConfig.spreadsheetId ||
+        localStorage.getItem(STORAGE_KEYS.sheetId) ||
+        '';
+      if (target) {
+        try {
+          await loadAuthorizedUsersFromGoogleSheet(target);
+          await loadBranchesFromGoogleSheet(target);
+          await loadMasterDataFromGoogleSheet(target);
+          await syncTransfersFromSheet(target);
+        } catch (e) {
+          console.warn('Auto-sync on startup failed:', e);
+        }
+      }
+    };
+    autoFetchSheet();
+  }, []);
 
   // Sync state to local storage on change
   useEffect(() => {
@@ -360,7 +630,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!isEmailAuthorized(clean)) {
       return {
         success: false,
-        message: `Email "${email}" is not in the list of authorized users. Please contact the administrator (hr.rftcom@gmail.com) for authorization.`
+        message: 'You are not an Authorized person to use it.'
       };
     }
     setCurrentUserEmail(clean);
@@ -386,7 +656,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!isPreAuthorized && existingIndex === -1) {
       return {
         success: false,
-        message: `Authorization Verification Failed: The email "${email}" is not in the authorized users list. Access to this inventory portal is restricted to pre-authorized personnel. Please contact hr.rftcom@gmail.com.`
+        message: 'You are not an Authorized person to use it.'
       };
     }
 
@@ -399,7 +669,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 ...u,
                 name: name.trim() || u.name,
                 assignedBranchId: assignedBranchId || u.assignedBranchId,
-                role: role || u.role,
+                role: clean === 'hr.rftcom@gmail.com' ? 'admin' : (role === 'admin' ? 'creator' : role || u.role),
                 status: 'active'
               }
             : u
@@ -407,11 +677,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       );
     } else {
       // Pre-authorized administrator or whitelisted domain
+      const isTargetAdmin = clean === 'hr.rftcom@gmail.com';
       const newUser: AuthorizedUser = {
         id: `usr-${Date.now()}`,
         email: clean,
         name: name.trim(),
-        role,
+        role: isTargetAdmin ? 'admin' : (role === 'admin' ? 'creator' : role),
         assignedBranchId,
         status: 'active',
         addedAt: new Date().toISOString()
@@ -442,20 +713,66 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const addAuthorizedUser = (user: Omit<AuthorizedUser, 'id' | 'addedAt'>) => {
+    const cleanEmail = user.email.toLowerCase().trim();
+    // Only hr.rftcom@gmail.com can ever have admin role
+    const assignedRole: UserRole = cleanEmail === 'hr.rftcom@gmail.com' ? 'admin' : (user.role === 'admin' ? 'creator' : user.role);
+
     const newUser: AuthorizedUser = {
       ...user,
-      id: `usr-${Date.now()}`,
+      email: cleanEmail,
+      role: assignedRole,
+      id: `usr-${cleanEmail.replace(/[^a-z0-9]/g, '-')}`,
       addedAt: new Date().toISOString()
     };
-    setAuthorizedUsers(prev => [...prev, newUser]);
+
+    setAuthorizedUsers(prev => {
+      const filtered = prev.filter(u => u.email.toLowerCase() !== cleanEmail);
+      const updated = [...filtered, newUser];
+      localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(updated));
+      return updated;
+    });
+
+    // If Google Sheet is connected, append to Google Sheet tab "address" Column A
+    const sheetId = sheetConfig.spreadsheetId || localStorage.getItem(STORAGE_KEYS.sheetId);
+    if (sheetId && sheetConfig.accessToken) {
+      appendAuthorizedUserToSheet(sheetId, cleanEmail, sheetConfig.accessToken).catch(err => {
+        console.warn('Could not append user to Google Sheet tab address:', err);
+      });
+    }
   };
 
   const updateAuthorizedUser = (id: string, updates: Partial<AuthorizedUser>) => {
-    setAuthorizedUsers(prev => prev.map(u => (u.id === id ? { ...u, ...updates } : u)));
+    setAuthorizedUsers(prev => {
+      const updated = prev.map(u => {
+        if (u.id === id) {
+          const cleanEmail = (updates.email || u.email).toLowerCase().trim();
+          let nextRole = updates.role || u.role;
+          if (cleanEmail !== 'hr.rftcom@gmail.com' && nextRole === 'admin') {
+            nextRole = 'creator';
+          }
+          return {
+            ...u,
+            ...updates,
+            role: nextRole
+          };
+        }
+        return u;
+      });
+      localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const removeAuthorizedUser = (id: string) => {
-    setAuthorizedUsers(prev => prev.filter(u => u.id !== id));
+    // Strictly prevent removing the admin hr.rftcom@gmail.com
+    setAuthorizedUsers(prev => {
+      const updated = prev.filter(u => {
+        if (u.email.toLowerCase() === 'hr.rftcom@gmail.com') return true;
+        return u.id !== id && u.email.toLowerCase() !== id.toLowerCase();
+      });
+      localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(updated));
+      return updated;
+    });
   };
 
   // STRICT USER REQUIREMENT:
@@ -472,12 +789,16 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // Transfer creation
-  const createTransfer = (data: Omit<StockTransfer, 'id' | 'challanNo' | 'createdByEmail' | 'createdByName' | 'createdAt'>) => {
+  const createTransfer = (
+    data: Omit<StockTransfer, 'id' | 'createdByEmail' | 'createdByName' | 'createdAt'> & { challanNo?: string },
+    tokenOverride?: string
+  ): StockTransfer => {
     const fromBranch = branches.find(b => b.id === data.fromBranchId);
     const branchCode = fromBranch ? fromBranch.code.split('-')[0] : 'BR';
     const year = new Date().getFullYear();
     const count = transfers.length + 1;
-    const challanNo = `CHL-${branchCode}-${year}-${String(count).padStart(4, '0')}`;
+    const defaultChallanNo = `CHL-${branchCode}-${year}-${String(count).padStart(4, '0')}`;
+    const challanNo = data.challanNo?.trim() || defaultChallanNo;
 
     const newTransfer: StockTransfer = {
       ...data,
@@ -514,7 +835,169 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     );
 
     setTransfers(prev => [newTransfer, ...prev]);
+
+    // Update masterItems stock quantities dynamically
+    setMasterItems(prevMaster => {
+      const updated = prevMaster.map(mItem => {
+        const transferLine = data.items.find(
+          ti => ti.itemCode === mItem.itemCode || ti.itemName.toLowerCase() === mItem.name.toLowerCase()
+        );
+        if (!transferLine) return mItem;
+
+        const fromName = data.fromBranchName;
+        const toName = data.toBranchName;
+        const curFromStock = mItem.branchStocks[fromName] ?? mItem.branchStocks[fromName.toLowerCase()] ?? 0;
+        const curToStock = mItem.branchStocks[toName] ?? mItem.branchStocks[toName.toLowerCase()] ?? 0;
+
+        const newFrom = Math.max(0, curFromStock - transferLine.quantity);
+        const newTo = curToStock + transferLine.quantity;
+
+        return {
+          ...mItem,
+          branchStocks: {
+            ...mItem.branchStocks,
+            [fromName]: newFrom,
+            [fromName.toLowerCase()]: newFrom,
+            [toName]: newTo,
+            [toName.toLowerCase()]: newTo
+          }
+        };
+      });
+      localStorage.setItem(STORAGE_KEYS.masterItems, JSON.stringify(updated));
+      return updated;
+    });
+
+    // Save directly to Google Sheets: BOTH tab "buro" and tab "club" (Consumption & Production entries)
+    const effectiveToken = tokenOverride || sheetConfig.accessToken;
+    const sheetId = sheetConfig.spreadsheetId || localStorage.getItem(STORAGE_KEYS.sheetId) || '';
+    if (sheetId) {
+      saveTransferToGoogleSheets(sheetId, newTransfer, effectiveToken)
+        .then(res => {
+          if (res.success) {
+            setSyncedTransferIds(prev => {
+              const next = Array.from(new Set([...prev, newTransfer.id]));
+              localStorage.setItem(STORAGE_KEYS.syncedTransfers, JSON.stringify(next));
+              return next;
+            });
+          }
+        })
+        .catch(err => {
+          console.warn('Direct save to Google Sheets (buro & club) error:', err);
+        });
+    }
+
     return newTransfer;
+  };
+
+  const isTransferSyncedToSheet = (transferId: string): boolean => {
+    return syncedTransferIds.includes(transferId);
+  };
+
+  const syncTransferToSheets = async (transfer: StockTransfer, tokenOverride?: string) => {
+    const sheetId = sheetConfig.spreadsheetId || localStorage.getItem(STORAGE_KEYS.sheetId) || '';
+    if (!sheetId) {
+      return { success: false, error: 'No Google Sheet connected. Please configure your sheet in Settings.' };
+    }
+
+    let token = tokenOverride || sheetConfig.accessToken || getStoredAccessToken();
+    if (!token && !localStorage.getItem('floweasy_apps_script_url')) {
+      try {
+        token = await requestGoogleAccessToken(true);
+        if (token) {
+          setSheetConfig(prev => ({
+            ...prev,
+            accessToken: token,
+            isConnected: true
+          }));
+        }
+      } catch (authErr: any) {
+        return {
+          success: false,
+          unauthorized: true,
+          error: authErr.message || 'Google write authorization is required to save rows into Google Sheets.'
+        };
+      }
+    }
+
+    const res = await saveTransferToGoogleSheets(sheetId, transfer, token);
+    if (res.success) {
+      setSyncedTransferIds(prev => {
+        const next = Array.from(new Set([...prev, transfer.id]));
+        localStorage.setItem(STORAGE_KEYS.syncedTransfers, JSON.stringify(next));
+        return next;
+      });
+    }
+    return res;
+  };
+
+  const syncTransferToBuro = syncTransferToSheets;
+
+  const syncTransfersFromSheet = async (
+    sheetIdOrUrl?: string
+  ): Promise<{ success: boolean; count: number; error?: string }> => {
+    const rawInput = (
+      sheetIdOrUrl ||
+      sheetConfig.spreadsheetId ||
+      localStorage.getItem(STORAGE_KEYS.sheetId) ||
+      ''
+    ).trim();
+
+    if (!rawInput) {
+      return { success: false, count: 0, error: 'No Google Sheet link or ID provided.' };
+    }
+
+    const urlMatch = rawInput.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    const cleanId = urlMatch ? urlMatch[1] : rawInput;
+
+    try {
+      const res = await fetchTransfersFromGoogleSheet(cleanId, sheetConfig.accessToken);
+      if (res.success) {
+        setTransfers(res.transfers);
+        localStorage.setItem(STORAGE_KEYS.transfers, JSON.stringify(res.transfers));
+        const ids = res.transfers.map(t => t.id);
+        setSyncedTransferIds(ids);
+        localStorage.setItem(STORAGE_KEYS.syncedTransfers, JSON.stringify(ids));
+        return { success: true, count: res.transfers.length };
+      } else {
+        return { success: false, count: 0, error: res.error || 'Failed to fetch transfers from Google Sheet.' };
+      }
+    } catch (err: any) {
+      return { success: false, count: 0, error: err.message || 'Error fetching transfers from sheet.' };
+    }
+  };
+
+  const authorizeGoogleAndSyncAll = async (): Promise<{ success: boolean; syncedCount: number; error?: string }> => {
+    try {
+      const token = await requestGoogleAccessToken();
+      setSheetConfig(prev => ({
+        ...prev,
+        accessToken: token,
+        isConnected: true
+      }));
+
+      const sheetId = sheetConfig.spreadsheetId || localStorage.getItem(STORAGE_KEYS.sheetId) || '';
+      if (!sheetId) {
+        return { success: false, syncedCount: 0, error: 'Please enter your Google Sheet link in Settings first.' };
+      }
+
+      const unsynced = transfers.filter(t => !syncedTransferIds.includes(t.id));
+      let count = 0;
+      for (const t of unsynced) {
+        const res = await saveTransferToGoogleSheets(sheetId, t, token);
+        if (res.success) {
+          count++;
+          setSyncedTransferIds(prev => {
+            const next = Array.from(new Set([...prev, t.id]));
+            localStorage.setItem(STORAGE_KEYS.syncedTransfers, JSON.stringify(next));
+            return next;
+          });
+        }
+      }
+
+      return { success: true, syncedCount: count };
+    } catch (err: any) {
+      return { success: false, syncedCount: 0, error: err.message || 'Google authorization failed.' };
+    }
   };
 
   const updateTransfer = (id: string, updates: Partial<StockTransfer>) => {
@@ -568,6 +1051,60 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     );
 
     setTransfers(prev => prev.filter(t => t.id !== id));
+
+    setSyncedTransferIds(prev => {
+      const next = prev.filter(tid => tid !== id);
+      localStorage.setItem(STORAGE_KEYS.syncedTransfers, JSON.stringify(next));
+      return next;
+    });
+
+    // Delete matching rows from connected Google Sheet (both buro and club tabs)
+    const sheetId = sheetConfig.spreadsheetId || localStorage.getItem(STORAGE_KEYS.sheetId) || '';
+    if (sheetId && existing.challanNo) {
+      deleteTransferFromGoogleSheet(sheetId, existing.challanNo, sheetConfig.accessToken)
+        .then(delRes => {
+          if (delRes.success) {
+            console.log(`Challan ${existing.challanNo} successfully deleted from Google Sheet (${delRes.deletedCount} rows removed).`);
+          } else {
+            console.warn(`Could not delete challan ${existing.challanNo} from Google Sheet:`, delRes.error);
+          }
+        })
+        .catch(delErr => {
+          console.warn('Error deleting transfer from Google Sheet:', delErr);
+        });
+    }
+
+    // Restore stock in masterItems as well
+    setMasterItems(prevMaster => {
+      const updated = prevMaster.map(mItem => {
+        const transferLine = existing.items.find(
+          ti => ti.itemCode === mItem.itemCode || ti.itemName.toLowerCase() === mItem.name.toLowerCase()
+        );
+        if (!transferLine) return mItem;
+
+        const fromName = existing.fromBranchName;
+        const toName = existing.toBranchName;
+        const curFromStock = mItem.branchStocks[fromName] ?? mItem.branchStocks[fromName.toLowerCase()] ?? 0;
+        const curToStock = mItem.branchStocks[toName] ?? mItem.branchStocks[toName.toLowerCase()] ?? 0;
+
+        const restoredFrom = curFromStock + transferLine.quantity;
+        const restoredTo = Math.max(0, curToStock - transferLine.quantity);
+
+        return {
+          ...mItem,
+          branchStocks: {
+            ...mItem.branchStocks,
+            [fromName]: restoredFrom,
+            [fromName.toLowerCase()]: restoredFrom,
+            [toName]: restoredTo,
+            [toName.toLowerCase()]: restoredTo
+          }
+        };
+      });
+      localStorage.setItem(STORAGE_KEYS.masterItems, JSON.stringify(updated));
+      return updated;
+    });
+
     return { success: true };
   };
 
@@ -835,6 +1372,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <InventoryContext.Provider
       value={{
         currentUser,
+        isAdmin,
         authorizedUsers,
         branches,
         setBranches,
@@ -849,7 +1387,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         confirmBranchSelection,
         resetBranchSelection,
         activeBranch,
+        masterItems,
+        loadMasterDataFromGoogleSheet,
         loadBranchesFromGoogleSheet,
+        loadAuthorizedUsersFromGoogleSheet,
         isAuthenticated,
         loginWithEmail,
         signupWithEmail,
@@ -877,7 +1418,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         connectGoogleSheet,
         createAndConnectNewSheet,
         syncWithGoogleSheet,
-        fetchStockMasterFromCloud
+        fetchStockMasterFromCloud,
+        syncedTransferIds,
+        isTransferSyncedToSheet,
+        syncTransferToSheets,
+        syncTransferToBuro,
+        syncTransfersFromSheet,
+        authorizeGoogleAndSyncAll
       }}
     >
       {children}

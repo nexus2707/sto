@@ -74,7 +74,6 @@ export function exportTransferChallanPDF(transfer: StockTransfer, company: Compa
   // Items Table
   const tableData = transfer.items.map((item, index) => [
     index + 1,
-    item.itemCode,
     item.itemName,
     item.quantity.toLocaleString(),
     item.unit,
@@ -83,7 +82,7 @@ export function exportTransferChallanPDF(transfer: StockTransfer, company: Compa
 
   autoTable(doc, {
     startY: 92,
-    head: [['#', 'Item Code', 'Description / Product Details', 'Qty', 'Unit', 'Remarks']],
+    head: [['#', 'Description / Product Details', 'Qty', 'Unit', 'Remarks']],
     body: tableData,
     theme: 'grid',
     headStyles: {
@@ -97,12 +96,11 @@ export function exportTransferChallanPDF(transfer: StockTransfer, company: Compa
       textColor: [31, 41, 55]
     },
     columnStyles: {
-      0: { cellWidth: 10, halign: 'center' },
-      1: { cellWidth: 28, fontStyle: 'bold' },
-      2: { cellWidth: 70 },
-      3: { cellWidth: 18, halign: 'right', fontStyle: 'bold' },
-      4: { cellWidth: 16, halign: 'center' },
-      5: { cellWidth: 40 }
+      0: { cellWidth: 12, halign: 'center' },
+      1: { cellWidth: 96 },
+      2: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
+      3: { cellWidth: 18, halign: 'center' },
+      4: { cellWidth: 36 }
     }
   });
 

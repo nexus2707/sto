@@ -1,6 +1,8 @@
 {
-  "name": "Flow Easy",
+  "name": "Easy Flow",
   "description": "Multi-Branch Inventory & Location Ledger with Google Sheets synchronization, facture and proforma invoices, and multi-location management.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

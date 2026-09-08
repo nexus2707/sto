@@ -6,6 +6,7 @@ export interface AuthorizedUser {
   name: string;
   role: UserRole;
   assignedBranchId?: string;
+  assignedBranchName?: string;
   status: 'active' | 'inactive';
   addedAt: string;
 }
@@ -29,8 +30,10 @@ export interface Branch {
 export interface CompanyProfile {
   companyName: string;
   taxNumber: string; // NIF / VAT / TVA number (same across all branches)
+  taxId?: string;
   nationalId: string;
   rccm: string;
+  address?: string;
   defaultCurrency: 'FC' | 'USD';
   defaultExchangeRate: number; // e.g., 2850 FC per 1 USD
   defaultTvaRate: number; // e.g., 16%
@@ -59,7 +62,12 @@ export interface TransferItem {
   itemName: string;
   quantity: number;
   unit: string;
+  category?: string;
+  group?: string;
   unitCostFC?: number;
+  rateUSD?: number;
+  rateFC?: number;
+  performaQty?: number;
   remarks?: string;
 }
 
@@ -71,6 +79,9 @@ export interface StockTransfer {
   fromBranchName: string;
   toBranchId: string;
   toBranchName: string;
+  transactionType?: string;
+  branchContext?: string;
+  sourceStockBalances?: Record<string, number>;
   items: TransferItem[];
   totalItems: number;
   totalQuantity: number;
@@ -81,6 +92,15 @@ export interface StockTransfer {
   createdByName: string;
   createdAt: string;
   status: 'Completed' | 'In Transit' | 'Cancelled';
+}
+
+export interface MasterStockItem {
+  id: string;
+  itemCode: string;
+  name: string;
+  unit: string;
+  branchStocks: Record<string, number>;
+  totalStock?: number;
 }
 
 export interface InvoiceItem {
