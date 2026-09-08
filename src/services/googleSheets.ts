@@ -1,6 +1,6 @@
 import { StockItem, StockTransfer, Invoice, Branch, AuthorizedUser, MasterStockItem } from '../types';
 
-export const DEFAULT_OAUTH_CLIENT_ID = '896903801673-jmp1se6h1j6842mfkuh6v3i6a7oc40g9.apps.googleusercontent.com';
+export const DEFAULT_OAUTH_CLIENT_ID = '651669194082-3auhmu75rd3ajuu05h8opnlnrv3t5rcq.apps.googleusercontent.com';
 export const OAUTH_STORAGE_KEY = 'rft_inventory_oauth_client_id_v2';
 
 export function getOAuthClientId(): string {
