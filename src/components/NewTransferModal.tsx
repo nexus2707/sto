@@ -16,6 +16,11 @@ import {
 } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext';
 import { MasterStockItem, StockTransfer, TransferItem } from '../types';
+import {
+  getShopMappingByEmail,
+  getSheetNameForLocation,
+  generateNextChallanNo
+} from '../config/shopLocations';
 
 interface TransferRowState {
   id: string;
@@ -56,13 +61,12 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({
     }
   }, [isOpen]);
 
-  // 1. Determine Source (From) location dynamically from "branch name" sheet:
-  // User Requirement:
-  // "and if the user login as itkinshasa1@gmail.com in crome the from location will be predefined 'A1-SHOP NO1'"
+  // 1. Determine Source (From) location dynamically from predefined email mapping or "branch name" sheet:
   const predefinedSourceName = useMemo(() => {
     const cleanEmail = currentUser.email.trim().toLowerCase();
-    if (cleanEmail === 'itkinshasa1@gmail.com') {
-      return 'A1-SHOP NO1';
+    const mapped = getShopMappingByEmail(cleanEmail);
+    if (mapped?.locationName) {
+      return mapped.locationName;
     }
 
     // Check if a branch in "branch name" sheet matches the user's logged in email
@@ -91,11 +95,10 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({
   const [destinationLocation, setDestinationLocation] = useState<string>('');
   const [transactionType, setTransactionType] = useState<string>('Bon-Stock Transfer');
   
-  // Sequential Challan Number
+  // Sequential Challan Number with location-based prefix (e.g. Shop08/01)
   const initialChallanNo = useMemo(() => {
-    const nextSeq = 1040 + transfers.length + 1;
-    return `${nextSeq}`;
-  }, [transfers.length]);
+    return generateNextChallanNo(predefinedSourceName, transfers.map(t => t.challanNo));
+  }, [predefinedSourceName, transfers]);
 
   const [challanNo, setChallanNo] = useState<string>(initialChallanNo);
 
@@ -124,10 +127,11 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Synchronize sourceLocation whenever predefinedSourceName changes
+  // Synchronize sourceLocation and challanNo whenever predefinedSourceName or transfers change
   useEffect(() => {
     setSourceLocation(predefinedSourceName);
-  }, [predefinedSourceName]);
+    setChallanNo(generateNextChallanNo(predefinedSourceName, transfers.map(t => t.challanNo)));
+  }, [predefinedSourceName, transfers]);
 
   // Destination branch options extracted strictly from sheet "branch name"
   const destinationOptions = useMemo(() => {
@@ -474,11 +478,17 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({
                   />
                   <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3 pointer-events-none" />
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
-                  <span>✓ Locked to logged-in profile in 'branch name' sheet:</span>
-                  <span className="font-mono font-bold text-slate-700">{currentUser.email}</span>
-                  <span>→</span>
+                <p className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-1.5">
+                  <span>✓ Sender:</span>
                   <span className="font-bold text-blue-700">{sourceLocation}</span>
+                  <span className="text-slate-400">• Saves to:</span>
+                  <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                    {getSheetNameForLocation(sourceLocation)}
+                  </span>
+                  <span className="text-slate-400">&</span>
+                  <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                    club
+                  </span>
                 </p>
               </div>
 

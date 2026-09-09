@@ -239,6 +239,146 @@ export const INITIAL_AUTHORIZED_USERS: AuthorizedUser[] = [
     addedAt: '2026-01-10T08:00:00Z'
   },
   {
+    id: 'user-a6',
+    email: 'itkin.rft@gmail.com',
+    name: 'IT Kin RFT (A6-SHOP NO6)',
+    role: 'creator',
+    assignedBranchId: 'branch-a6',
+    assignedBranchName: 'A6-SHOP NO6',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-a9',
+    email: 'kfkcongo@gmail.com',
+    name: 'KFK Congo (A9-SHOP-KFK9)',
+    role: 'creator',
+    assignedBranchId: 'branch-a9',
+    assignedBranchName: 'A9-SHOP-KFK9',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-a7',
+    email: 'kiyafinformatique786@gmail.com',
+    name: 'Kiyaf Informatique (A7-SHOP NO7)',
+    role: 'creator',
+    assignedBranchId: 'branch-a7',
+    assignedBranchName: 'A7-SHOP NO7',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-a2',
+    email: 'najmainformatique17@gmail.com',
+    name: 'Najma Informatique (A2-SHOP NO2)',
+    role: 'creator',
+    assignedBranchId: 'branch-a2',
+    assignedBranchName: 'A2-SHOP NO2',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-a3',
+    email: 'nskinformatic38@gmail.com',
+    name: 'NSK Informatic (A3-SHOP NO3)',
+    role: 'creator',
+    assignedBranchId: 'branch-a3',
+    assignedBranchName: 'A3-SHOP NO3',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-aa12',
+    email: 'itinformatique360@gmail.com',
+    name: 'IT Informatique 360 (AA12-SHOP NO12)',
+    role: 'creator',
+    assignedBranchId: 'branch-aa12',
+    assignedBranchName: 'AA12-SHOP NO12',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-a5',
+    email: 'informaticcity427@gmail.com',
+    name: 'Informatic City (A5-SHOP NO5)',
+    role: 'creator',
+    assignedBranchId: 'branch-a5',
+    assignedBranchName: 'A5-SHOP NO5',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-aa13',
+    email: 'computercitykin777@gmail.com',
+    name: 'Computer City Kin (AA13-SHOP NO13)',
+    role: 'creator',
+    assignedBranchId: 'branch-aa13',
+    assignedBranchName: 'AA13-SHOP NO13',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-a4',
+    email: 'kiyainformatiq777@gmail.com',
+    name: 'Kiyainformatiq (A4-SHOP NO4)',
+    role: 'creator',
+    assignedBranchId: 'branch-a4',
+    assignedBranchName: 'A4-SHOP NO4',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-a4-alt',
+    email: 'kiyainformatiq7777@gmail.com',
+    name: 'Kiyainformatiq 7777 (A4-SHOP NO4)',
+    role: 'creator',
+    assignedBranchId: 'branch-a4',
+    assignedBranchName: 'A4-SHOP NO4',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-a8',
+    email: 'itelrft@gmail.com',
+    name: 'Itel RFT (A8-SHOP NO8)',
+    role: 'creator',
+    assignedBranchId: 'branch-a8',
+    assignedBranchName: 'A8-SHOP NO8',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-aa10',
+    email: 'kksmart337@gmail.com',
+    name: 'KK Smart (AA10SHOP NO-10)',
+    role: 'creator',
+    assignedBranchId: 'branch-aa10',
+    assignedBranchName: 'AA10SHOP NO-10',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-aa11',
+    email: 'najmainformatique12@gmail.com',
+    name: 'Najma Informatique 12 (AA11-SHOP NO11)',
+    role: 'creator',
+    assignedBranchId: 'branch-aa11',
+    assignedBranchName: 'AA11-SHOP NO11',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
+    id: 'user-a1',
+    email: 'nazmaelectronics108@gmail.com',
+    name: 'Nazma Electronics (A1-SHOP NO1)',
+    role: 'creator',
+    assignedBranchId: 'branch-a1',
+    assignedBranchName: 'A1-SHOP NO1',
+    status: 'active',
+    addedAt: '2026-01-10T08:00:00Z'
+  },
+  {
     id: 'user-kin',
     email: 'itkinshasa1@gmail.com',
     name: 'A1 Operations',

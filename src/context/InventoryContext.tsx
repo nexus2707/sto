@@ -20,6 +20,12 @@ import {
   INITIAL_MASTER_ITEMS
 } from '../data/mockData';
 import {
+  getShopMappingByEmail,
+  getSheetNameForLocation,
+  generateNextChallanNo,
+  isPredefinedAuthorizedEmail
+} from '../config/shopLocations';
+import {
   createGoogleSpreadsheet,
   fetchBranchesFromSheet,
   fetchStockMasterFromSheet,
@@ -166,11 +172,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     const savedStatus = localStorage.getItem(STORAGE_KEYS.authStatus);
-    const savedEmail = localStorage.getItem(STORAGE_KEYS.currentUserEmail) || 'hr.rftcom@gmail.com';
+    const savedEmail = (localStorage.getItem(STORAGE_KEYS.currentUserEmail) || 'hr.rftcom@gmail.com').trim().toLowerCase();
     const users = localStorage.getItem(STORAGE_KEYS.users);
     const parsedUsers: AuthorizedUser[] = users ? JSON.parse(users) : INITIAL_AUTHORIZED_USERS;
     const isAuth =
       savedEmail === 'hr.rftcom@gmail.com' ||
+      isPredefinedAuthorizedEmail(savedEmail) ||
       parsedUsers.some(u => u.email.toLowerCase() === savedEmail.toLowerCase() && u.status === 'active');
     return savedStatus === 'false' ? false : isAuth;
   });
@@ -416,19 +423,18 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const currentUser: AuthorizedUser = (() => {
     const clean = currentUserEmail.toLowerCase().trim();
     const isUserAdmin = clean === 'hr.rftcom@gmail.com';
+    const shopMapping = getShopMappingByEmail(clean);
+
     let branchForUser = branches.find(
       b => b.email && b.email.trim().toLowerCase() === clean
     );
-    // User Requirement: if user login as itkinshasa1@gmail.com, predefined location is "A1-SHOP NO1"
-    if (clean === 'itkinshasa1@gmail.com') {
-      const a1Branch = branches.find(b => b.name === 'A1-SHOP NO1');
-      if (a1Branch) branchForUser = a1Branch;
+    if (shopMapping) {
+      const mappedBranch = branches.find(b => b.name.toLowerCase() === shopMapping.locationName.toLowerCase());
+      if (mappedBranch) branchForUser = mappedBranch;
     }
 
     const defaultBranch = branches.find(b => b.name === 'A1-SHOP NO1') || branches[0];
-    const userBranchName = clean === 'itkinshasa1@gmail.com'
-      ? 'A1-SHOP NO1'
-      : (branchForUser?.name || defaultBranch?.name || 'A1-SHOP NO1');
+    const userBranchName = shopMapping?.locationName || (branchForUser?.name || defaultBranch?.name || 'A1-SHOP NO1');
     const userBranchId = branchForUser?.id || defaultBranch?.id || 'branch-a1';
 
     const found = authorizedUsers.find(
@@ -437,6 +443,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (found) {
       return {
         ...found,
+        name: shopMapping?.name || found.name,
         assignedBranchId: userBranchId,
         assignedBranchName: userBranchName,
         // STRICT ENFORCEMENT: ONLY hr.rftcom@gmail.com can ever have 'admin' role
@@ -446,8 +453,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return {
       id: isUserAdmin ? 'user-admin' : `usr-${Date.now()}`,
       email: clean,
-      name: isUserAdmin ? 'Easy Flow Administrator' : (clean === 'itkinshasa1@gmail.com' ? 'A1 Operations' : (clean.split('@')[0] || 'Authorized User')),
-      role: isUserAdmin ? 'admin' : 'creator',
+      name: shopMapping?.name || (isUserAdmin ? 'Easy Flow Administrator' : (clean.split('@')[0] || 'Authorized User')),
+      role: isUserAdmin ? 'admin' : (shopMapping?.role || 'creator'),
       assignedBranchId: userBranchId,
       assignedBranchName: userBranchName,
       status: 'active',
@@ -622,6 +629,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!email) return false;
     const clean = email.trim().toLowerCase();
     if (clean === 'hr.rftcom@gmail.com') return true;
+    if (isPredefinedAuthorizedEmail(clean)) return true;
     return authorizedUsers.some(u => u.email.toLowerCase() === clean && u.status === 'active');
   };
 
@@ -630,7 +638,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!isEmailAuthorized(clean)) {
       return {
         success: false,
-        message: 'You are not an Authorized person to use it.'
+        message: 'Warning: You are not authorized person to use this app.'
       };
     }
     setCurrentUserEmail(clean);
@@ -793,11 +801,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     data: Omit<StockTransfer, 'id' | 'createdByEmail' | 'createdByName' | 'createdAt'> & { challanNo?: string },
     tokenOverride?: string
   ): StockTransfer => {
-    const fromBranch = branches.find(b => b.id === data.fromBranchId);
-    const branchCode = fromBranch ? fromBranch.code.split('-')[0] : 'BR';
-    const year = new Date().getFullYear();
-    const count = transfers.length + 1;
-    const defaultChallanNo = `CHL-${branchCode}-${year}-${String(count).padStart(4, '0')}`;
+    const defaultChallanNo = generateNextChallanNo(data.fromBranchName, transfers.map(t => t.challanNo));
     const challanNo = data.challanNo?.trim() || defaultChallanNo;
 
     const newTransfer: StockTransfer = {

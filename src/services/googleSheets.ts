@@ -1,6 +1,7 @@
 import { StockItem, StockTransfer, Invoice, Branch, AuthorizedUser, MasterStockItem } from '../types';
+import { getSheetNameForLocation } from '../config/shopLocations';
 
-export const DEFAULT_OAUTH_CLIENT_ID = '651669194082-3auhmu75rd3ajuu05h8opnlnrv3t5rcq.apps.googleusercontent.com';
+export const DEFAULT_OAUTH_CLIENT_ID = '896903801673-jmp1se6h1j6842mfkuh6v3i6a7oc40g9.apps.googleusercontent.com';
 export const OAUTH_STORAGE_KEY = 'rft_inventory_oauth_client_id_v2';
 
 export function getOAuthClientId(): string {
@@ -249,7 +250,7 @@ export function requestGoogleAccessToken(promptConsent: boolean = true): Promise
         },
         error_callback: (err: any) => reject(err)
       });
-      client.requestAccessToken({ prompt: 'consent' });
+      client.requestAccessToken({ prompt: promptConsent ? 'consent' : '' });
     } catch (e) {
       reject(e);
     }
@@ -1168,11 +1169,12 @@ export function downloadTransferBuroCsv(transfer: StockTransfer) {
 }
 
 /**
- * Save / append stock transfer line items into Google Sheet tab named "buro"
- * as per defined 28 columns in SHEET_COLUMNS.locationLedger.
+ * Save / append stock transfer line items into a specific Google Sheet tab
+ * (e.g. "kin-sh2", "kin-sh6", "buro") as per defined 28 columns in SHEET_COLUMNS.locationLedger.
  */
-export async function appendTransferToBuroSheet(
+export async function appendTransferToLocationSheet(
   spreadsheetId: string,
+  tabTitle: string,
   transfer: StockTransfer,
   token?: string | null
 ): Promise<{ success: boolean; rowsCount: number; unauthorized?: boolean; error?: string }> {
@@ -1180,15 +1182,22 @@ export async function appendTransferToBuroSheet(
     return { success: false, rowsCount: 0, error: 'No items in transfer.' };
   }
 
+  const cleanTab = tabTitle.trim() || 'buro';
   const rows = formatTransferBuroRows(transfer);
 
   // Always store locally in localStorage for persistent offline & immediate ledger viewing
   try {
-    const existing = JSON.parse(localStorage.getItem('floweasy_buro_records') || '[]');
+    const key = `floweasy_${cleanTab.toLowerCase()}_records`;
+    const existing = JSON.parse(localStorage.getItem(key) || '[]');
     const updated = [...rows, ...existing];
-    localStorage.setItem('floweasy_buro_records', JSON.stringify(updated));
+    localStorage.setItem(key, JSON.stringify(updated));
+    // Also update general buro cache
+    if (cleanTab.toLowerCase() !== 'buro') {
+      const buroExisting = JSON.parse(localStorage.getItem('floweasy_buro_records') || '[]');
+      localStorage.setItem('floweasy_buro_records', JSON.stringify([...rows, ...buroExisting]));
+    }
   } catch (err) {
-    console.warn('Could not cache buro record locally:', err);
+    console.warn(`Could not cache ${cleanTab} record locally:`, err);
   }
 
   if (!spreadsheetId) {
@@ -1207,11 +1216,11 @@ export async function appendTransferToBuroSheet(
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheet: 'buro', rows })
+        body: JSON.stringify({ sheet: cleanTab, rows })
       });
       return { success: true, rowsCount: rows.length };
     } catch (scriptErr: any) {
-      console.warn('Apps Script direct post failed:', scriptErr);
+      console.warn(`Apps Script direct post to ${cleanTab} failed:`, scriptErr);
     }
   }
 
@@ -1228,8 +1237,13 @@ export async function appendTransferToBuroSheet(
   const urlMatch = spreadsheetId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   const cleanId = urlMatch ? urlMatch[1] : spreadsheetId.trim();
 
-  // Try different variations of tab name "buro"
-  const tabCandidates = ["'buro'!A:AB", "'Buro'!A:AB", "'BURO'!A:AB", "buro!A:AB", "Buro!A:AB"];
+  // Try different variations of tab name
+  const tabCandidates = [
+    `'${cleanTab}'!A:AB`,
+    `${cleanTab}!A:AB`,
+    `'${cleanTab.toLowerCase()}'!A:AB`,
+    `'${cleanTab.toUpperCase()}'!A:AB`
+  ];
 
   for (const tabName of tabCandidates) {
     try {
@@ -1265,7 +1279,7 @@ export async function appendTransferToBuroSheet(
     }
   }
 
-  // If all tab append attempts failed, try to auto-create the 'buro' sheet tab with 28 headers
+  // If all tab append attempts failed, try to auto-create the sheet tab with 28 headers
   try {
     const addSheetRes = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`,
@@ -1280,7 +1294,7 @@ export async function appendTransferToBuroSheet(
             {
               addSheet: {
                 properties: {
-                  title: 'buro',
+                  title: cleanTab,
                   gridProperties: { frozenRowCount: 1 }
                 }
               }
@@ -1293,7 +1307,7 @@ export async function appendTransferToBuroSheet(
     if (addSheetRes.ok) {
       // Add the 28 headers and data rows
       await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/'buro'!A1:AB?valueInputOption=USER_ENTERED`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/'${encodeURIComponent(cleanTab)}'!A1:AB?valueInputOption=USER_ENTERED`,
         {
           method: 'PUT',
           headers: {
@@ -1308,14 +1322,26 @@ export async function appendTransferToBuroSheet(
       return { success: true, rowsCount: rows.length };
     }
   } catch (sheetCreateErr) {
-    console.warn('Auto-creating buro tab failed:', sheetCreateErr);
+    console.warn(`Auto-creating ${cleanTab} tab failed:`, sheetCreateErr);
   }
 
   return {
     success: false,
     rowsCount: rows.length,
-    error: 'Could not append rows to Google Sheet tab "buro". Please check sheet permissions.'
+    error: `Could not append rows to Google Sheet tab "${cleanTab}". Please check sheet permissions.`
   };
+}
+
+/**
+ * Save / append stock transfer line items into Google Sheet tab named "buro"
+ * as per defined 28 columns in SHEET_COLUMNS.locationLedger.
+ */
+export async function appendTransferToBuroSheet(
+  spreadsheetId: string,
+  transfer: StockTransfer,
+  token?: string | null
+): Promise<{ success: boolean; rowsCount: number; unauthorized?: boolean; error?: string }> {
+  return appendTransferToLocationSheet(spreadsheetId, 'buro', transfer, token);
 }
 
 /**
@@ -1617,7 +1643,7 @@ export async function appendTransferToClubSheet(
 }
 
 /**
- * Save transfer to BOTH "buro" and "club" tabs
+ * Save transfer to sender location sheet (e.g. "kin-sh2"), "buro", and "club" tabs
  */
 export async function saveTransferToGoogleSheets(
   spreadsheetId: string,
@@ -1625,18 +1651,38 @@ export async function saveTransferToGoogleSheets(
   token?: string | null
 ): Promise<{
   success: boolean;
+  locationSheetName: string;
+  locationCount: number;
   buroCount: number;
   clubCount: number;
   unauthorized?: boolean;
   error?: string;
 }> {
   const effectiveToken = token || getStoredAccessToken();
-  const buroRes = await appendTransferToBuroSheet(spreadsheetId, transfer, effectiveToken);
+  const locationSheetName = getSheetNameForLocation(transfer.fromBranchName);
+
+  // 1. Save to sender location sheet (e.g. "kin-sh2")
+  const locRes = await appendTransferToLocationSheet(spreadsheetId, locationSheetName, transfer, effectiveToken);
+
+  // 2. Also save to "buro" sheet tab if not already buro
+  let buroRes: { success: boolean; rowsCount: number; unauthorized?: boolean; error?: string } = {
+    success: true,
+    rowsCount: 0,
+    unauthorized: false,
+    error: ''
+  };
+  if (locationSheetName.toLowerCase() !== 'buro') {
+    buroRes = await appendTransferToLocationSheet(spreadsheetId, 'buro', transfer, effectiveToken);
+  } else {
+    buroRes = locRes;
+  }
+
+  // 3. Save to "club" sheet tab (Consumption & Production entries)
   const clubRes = await appendTransferToClubSheet(spreadsheetId, transfer, effectiveToken);
 
-  const overallSuccess = buroRes.success && clubRes.success;
-  const isUnauthorized = buroRes.unauthorized || clubRes.unauthorized;
-  const partialSuccess = buroRes.success || clubRes.success;
+  const overallSuccess = locRes.success && clubRes.success;
+  const isUnauthorized = locRes.unauthorized || clubRes.unauthorized || buroRes.unauthorized;
+  const partialSuccess = locRes.success || clubRes.success || buroRes.success;
 
   let combinedError = '';
   if (!overallSuccess) {
@@ -1644,12 +1690,14 @@ export async function saveTransferToGoogleSheets(
       combinedError =
         'Google write authorization (OAuth token) required to write into Google Sheets. Please click "Authorize Google Sheets" to sync.';
     } else {
-      combinedError = [buroRes.error, clubRes.error].filter(Boolean).join(' | ');
+      combinedError = [locRes.error, clubRes.error, buroRes.error].filter(Boolean).join(' | ');
     }
   }
 
   return {
     success: overallSuccess || partialSuccess,
+    locationSheetName,
+    locationCount: locRes.rowsCount,
     buroCount: buroRes.rowsCount,
     clubCount: clubRes.rowsCount,
     unauthorized: isUnauthorized,
@@ -1711,10 +1759,10 @@ export async function deleteTransferFromGoogleSheet(
     let totalDeleted = 0;
     const requests: any[] = [];
 
-    // Check tabs "buro" and "club" (case-insensitive)
+    // Check tabs "buro", "club", and location tabs starting with "kin-sh" (case-insensitive)
     const targetSheets = sheetsList.filter(s => {
       const t = s.properties.title.toLowerCase();
-      return t === 'buro' || t === 'club';
+      return t === 'buro' || t === 'club' || t.startsWith('kin-sh');
     });
 
     for (const sheet of targetSheets) {

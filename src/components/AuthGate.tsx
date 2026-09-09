@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext';
 import { UserRole } from '../types';
+import { PREDEFINED_SHOP_CONFIGS } from '../config/shopLocations';
 
 interface AuthGateProps {
   onSuccess?: () => void;
@@ -187,13 +188,13 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSuccess, unauthorizedEmail
             <div className="p-4 bg-rose-950/80 border-2 border-rose-500/80 rounded-xl text-rose-100 space-y-2 shadow-lg">
               <div className="flex items-center gap-2.5 text-rose-300 font-extrabold text-sm sm:text-base">
                 <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
-                <span>Warning: You are not an Authorized person to use it.</span>
+                <span>Warning: You are not authorized person.</span>
               </div>
               <p className="text-xs text-rose-200/90 leading-relaxed">
-                The account currently used in your browser (<strong>{unauthorizedEmail || loginEmail || currentUser.email}</strong>) is not in the authorized directory.
+                The account currently used in your browser (<strong>{unauthorizedEmail || loginEmail || currentUser.email}</strong>) is not recognized as an authorized person.
               </p>
               <p className="text-[11px] text-rose-300/80 leading-relaxed">
-                Authorized user emails are stored and automatically fetched from the Google Sheet tab <strong>"address" (Column A)</strong>. Only the administrator (<strong>hr.rftcom@gmail.com</strong>) has access to authorize accounts or make administrative changes.
+                Please log in with your predefined shop email address or contact the administrator (<strong>hr.rftcom@gmail.com</strong>).
               </p>
             </div>
           )}
@@ -251,43 +252,52 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSuccess, unauthorizedEmail
                 </button>
               </form>
 
-              {/* Quick Select One-Click Demo Profiles */}
+              {/* Quick Select Predefined Authorized Shop Profiles */}
               <div className="pt-4 border-t border-slate-700/60">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Quick Log In as Registered Staff:
+                    Authorized Predefined Shop Profiles:
                   </span>
-                  <span className="text-[10px] text-slate-500">Click to authenticate</span>
+                  <span className="text-[10px] text-slate-500">Click email to log in</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {authorizedUsers.slice(0, 4).map(user => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                  {PREDEFINED_SHOP_CONFIGS.map(shop => (
                     <button
-                      key={user.email}
+                      key={shop.email}
                       type="button"
-                      id={`quick-login-${user.id}`}
-                      onClick={() => handleQuickLogin(user.email)}
-                      className="text-left p-2.5 rounded-lg bg-slate-900/50 hover:bg-slate-700/60 border border-slate-700/60 text-xs flex flex-col justify-between transition-colors cursor-pointer group"
+                      id={`quick-login-${shop.email.replace(/[@.]/g, '-')}`}
+                      onClick={() => handleQuickLogin(shop.email)}
+                      className="text-left p-2.5 rounded-lg bg-slate-900/60 hover:bg-slate-700/60 border border-slate-700/60 text-xs flex flex-col justify-between transition-colors cursor-pointer group"
                     >
                       <div className="flex items-center justify-between w-full">
                         <span className="font-semibold text-slate-200 group-hover:text-blue-400 truncate">
-                          {user.name}
+                          {shop.name}
                         </span>
                         <span
                           className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${
-                            user.role === 'admin'
+                            shop.role === 'admin'
                               ? 'bg-blue-900 text-blue-300'
-                              : user.role === 'creator'
-                              ? 'bg-emerald-900/80 text-emerald-300'
-                              : 'bg-slate-800 text-slate-400'
+                              : 'bg-emerald-900/80 text-emerald-300'
                           }`}
                         >
-                          {user.role}
+                          {shop.locationName}
                         </span>
                       </div>
                       <span className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
-                        {user.email}
+                        {shop.email}
                       </span>
+                      <div className="mt-1 flex items-center gap-1.5 text-[9px]">
+                        <span className="text-slate-500 font-mono">Sheet:</span>
+                        <span className="font-mono text-emerald-400 font-bold">{shop.sheetName}</span>
+                        {shop.prefix && (
+                          <>
+                            <span className="text-slate-600">•</span>
+                            <span className="text-slate-500 font-mono">Prefix:</span>
+                            <span className="font-mono text-amber-300 font-semibold">{shop.prefix}</span>
+                          </>
+                        )}
+                      </div>
                     </button>
                   ))}
                 </div>
